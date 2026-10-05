@@ -132,7 +132,9 @@ class UiTest {
         compose.onNodeWithText("Koko tallennettu historia").assertIsDisplayed()
         compose.onNodeWithText("Metrix-listan tapahtumatunnisteita: 1").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Vanhan historian rajoittamia tuloshakuja: 1").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Viimeiset 12 kuukautta").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Vanhoja käyntejä ilman tuloskorttia: 0. Rajoitettuja tapahtumia ilman varmennettua ratakäyntiä: 1.").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToNode(hasText("Viimeiset 12 kuukautta"))
+        compose.onNodeWithText("Viimeiset 12 kuukautta").assertIsDisplayed()
     }
     @Test fun profileCreationAndSelectionEmptyState() {
         start()

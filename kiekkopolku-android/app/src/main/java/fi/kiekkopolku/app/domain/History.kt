@@ -12,7 +12,7 @@ data class RoundEntry(val roundId: String, val externalId: String, val source: S
     val playerId: String, val courseId: String?, val date: String, val layout: String?, val tee: String?,
     val total: Int?, val relative: Int?, val status: String, val individual: Boolean,
     val completeHoles: Boolean, val holes: List<Hole>) {
-    val played: Boolean get() = status == "FINISHED" || (status in listOf("DNF", "IN_PROGRESS") && holes.any { (it.score ?: 0) > 0 })
+    val played: Boolean get() = status in listOf("FINISHED", "METADATA_ONLY") || (status in listOf("DNF", "IN_PROGRESS") && holes.any { (it.score ?: 0) > 0 })
 }
 data class History(val players: List<Player> = emptyList(), val courses: List<Course> = emptyList(),
     val entries: List<RoundEntry> = emptyList(), val metrixEvents: List<MetrixEvent> = emptyList()) {
@@ -58,7 +58,7 @@ data class Coverage(val listedEvents: Int, val blockedCards: Int, val otherUnava
 fun History.coverage(playerIds: Set<String> = activePlayers.map { it.id }.toSet()): Coverage {
     val selected = metrixEvents.filter { it.playerId in playerIds }
     return Coverage(selected.filter { it.listed }.map { it.externalId }.distinct().size,
-        selected.filter { it.outcome == "HISTORY_LIMIT" }.map { it.externalId }.distinct().size,
+        selected.filter { it.outcome in listOf("HISTORY_LIMIT", "HISTORY_METADATA_MISSING") }.map { it.externalId }.distinct().size,
         selected.filter { it.outcome in listOf("ACCESS", "RESPONSE", "UNSUPPORTED") }.map { it.externalId }.distinct().size,
         selected.filter { it.outcome == "PENDING" }.map { it.externalId }.distinct().size)
 }
@@ -67,4 +67,11 @@ fun History.entriesLastYear(today: java.time.LocalDate = java.time.LocalDate.now
 fun History.physicalCourseCount(entries: List<RoundEntry> = selectedEntries()): Int {
     val ids = entries.mapNotNull { it.courseId }.toSet()
     return courses.filter { it.id in ids }.map { it.physicalId }.distinct().size
+}
+
+fun History.unresolvedHistoricalEvents(): Int {
+    val active = activePlayers.map { it.id }.toSet()
+    val locatedVisits = selectedEntries().filter { it.courseId != null }.map { it.playerId to it.externalId }.toSet()
+    return metrixEvents.filter { it.playerId in active && it.outcome in listOf("HISTORY_LIMIT", "HISTORY_METADATA_MISSING") &&
+        it.playerId to it.externalId !in locatedVisits }.map { it.externalId }.distinct().size
 }

@@ -12,23 +12,24 @@ Brändissä yhdistyvät frisbeegolf, kartta, matka, historia ja luonto. Ilme on 
 - [Täyden logon luonnos](assets/brand/kiekkopolku-full-logo-concept.png) – symboli, nimi ja slogan.
 - [Generointipromptit](assets/brand/prompts.md).
 
-Kuvat ovat hyväksyttäväksi tarkoitettuja rasteriluonnoksia, eivät valmiita Android-resursseja. Hyväksymisen jälkeen tehdään adaptive launcher iconin foreground ja background, themed icons -toiminnon monochrome-kuvake, tarvittavat mipmap-versiot sekä splash screen -logo. Tuotantoversioissa viimeistellään tasaiset värit, läpinäkyvyys, suoja-alueet ja toimivuus pienissä ko'oissa. Slogan pidetään poistettavana osana täyttä logoa.
+Alkuperäiset vihreät kuvat ovat luonnoksia. Version 0.5.0 oma [harmaa sovelluskuvake](assets/brand/kiekkopolku-icon.svg) yhdistää karttapinnin ja korin. Android-resursseissa ovat adaptive foreground/background, monochrome, viisi PNG-tiheyttä sekä splash-logo. Kuvakkeessa ei ole tekstiä.
 
 ## Sovelluksen suunnitelma
 
 [PHASE 1: tutkimus ja arkkitehtuuri](docs/PHASE-1.md) sisältää integraatiolöydökset, epävarmuudet, ehdotetun Room-mallin, pakettirakenteen, MVP-rajauksen ja vaiheittaisen toteutussuunnitelman.
 
-## Android-sovellus — v0.4.0
+## Android-sovellus — v0.5.0
 
 Android-projekti on kansiossa [kiekkopolku-android](kiekkopolku-android/). Avaa tämä kansio Android Studiossa. Sovellus sisältää pelaajaprofiilit, monivalinnan, ratalistan, kierrokset ja väylätulokset, acet sekä tilastot. Tiedot tallennetaan Roomiin. Esimerkkiperhe ladataan vain käyttäjän valinnasta.
 
-- [Lataa Kiekkopolku 0.4.0 APK](https://github.com/Tenuxi/kiekkopolku/raw/refs/heads/main/apk-releases/0.4.0/kiekkopolku-0.4.0-debug.apk)
-- [Lataa version 0.4.0 lähdekoodi ZIP-pakettina](https://github.com/Tenuxi/kiekkopolku/archive/refs/tags/v0.4.0.zip) — Android-projekti on paketissa omassa `kiekkopolku-android`-kansiossaan.
+- [Päivitä nykyinen testisovellus: 0.5.0 debug-APK](https://github.com/Tenuxi/kiekkopolku/raw/refs/heads/main/apk-releases/0.5.0/kiekkopolku-0.5.0-debug.apk)
+- [Lataa allekirjoitettu release-APK](https://github.com/Tenuxi/kiekkopolku/raw/refs/heads/main/apk-releases/0.5.0/kiekkopolku-0.5.0-release.apk) — erillinen sovellus; lisää profiilit uudelleen. Nykyisen testisovelluksen päivittämiseen käytä yllä olevaa debug-APK:ta.
+- [Lataa version 0.5.0 lähdekoodi ZIP-pakettina](https://github.com/Tenuxi/kiekkopolku/archive/refs/tags/v0.5.0.zip) — Android-projekti on paketissa omassa `kiekkopolku-android`-kansiossaan.
 - [APK-arkisto ja vanhan version asennusohje](apk-releases/README.md)
 - [Käännös- ja käyttöohje](kiekkopolku-android/README.md)
-- [Version 0.4.0 muutokset ja integraation rajat](docs/RELEASE-0.4.0.md)
+- [Version 0.5.0 muutokset ja integraation rajat](docs/RELEASE-0.5.0.md)
 - [PHASE 2:n toteutus ja testitulokset](docs/PHASE-2.md)
 
-Tarvitset vähintään Android 8.0:n. APK on testikäyttöön allekirjoitettu debug-versio. Pelaajan voi lisätä ID:llä, integraatiokoodilla tai molemmilla. Koodi tarkistetaan Metrixistä ja tallennetaan salattuna; ID:n omistajuutta ei varmenneta. Kierroshistorian tuonti tarvitsee sekä pelaaja-ID:n että integraatiokoodin. Sovellus tarkistaa tallennetut pelaajat avautuessaan; päivityskuvake tekee valituille pelaajille täyden uusintahaun. Tuodut radat/layoutit, kierrokset ja väylätulokset säilyvät paikallisesti. Metrix voi rajoittaa vanhan historian saatavuutta. Kartta näyttää sijainnilliset pelatut radat tummalla OpenFreeMap-taustakartalla. Tilastoissa erotetaan koko tallennettu historia, viimeiset 12 kuukautta ja Metrix-tapahtumalistan kattavuus. Frisbeegolfradat.fi-integraatio ei ole käytössä.
+Tarvitset vähintään Android 8.0:n. APK on testikäyttöön allekirjoitettu debug-versio. Pelaajan voi lisätä ID:llä, integraatiokoodilla tai molemmilla. Koodi tarkistetaan Metrixistä ja tallennetaan salattuna; ID:n omistajuutta ei varmenneta. Kierroshistorian tuonti tarvitsee sekä pelaaja-ID:n että integraatiokoodin. Sovellus tarkistaa tallennetut pelaajat avautuessaan; päivityskuvake tekee valituille pelaajille täyden uusintahaun. Tuodut radat/layoutit, kierrokset ja väylätulokset säilyvät paikallisesti. Metrix voi rajoittaa vanhan historian saatavuutta. Kartta näyttää sijainnilliset pelatut radat vaalealla OpenFreeMap Positron -taustakartalla. Vihreä koripinni tarkoittaa viimeisen 12 kuukauden käyntiä, oranssi vain vanhempia käyntejä. Julkisilta Metrix-tapahtumasivuilta varmennetut vanhat käynnit tallennetaan ilman tuloskorttia. Kaikkien rajoitettujen tapahtumien tietoja ei välttämättä saada. Tilastoissa erotetaan koko tallennettu historia, viimeiset 12 kuukautta ja Metrix-tapahtumalistan kattavuus. Frisbeegolfradat.fi-integraatio ei ole käytössä.
 
-Version lähde on `kiekkopolku-android/version.properties`. Commit-viestit alkavat sovelluksen versionumerolla, esimerkiksi `[v0.4.0]`. Ota tarkistus käyttöön kloonauksen jälkeen: `git config core.hooksPath .githooks`. Julkaistu APK säilytetään muuttumattomana versionumerokansiossa ja vastaava lähdekoodi Git-tagissa.
+Version lähde on `kiekkopolku-android/version.properties`. Commit-viestit alkavat sovelluksen versionumerolla, esimerkiksi `[v0.5.0]`. Ota tarkistus käyttöön kloonauksen jälkeen: `git config core.hooksPath .githooks`. Julkaistu APK säilytetään muuttumattomana versionumerokansiossa ja vastaava lähdekoodi Git-tagissa.

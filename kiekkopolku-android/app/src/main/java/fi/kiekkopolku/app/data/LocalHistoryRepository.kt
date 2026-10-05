@@ -156,7 +156,7 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                             if (!seen.add(id)) continue
                             dao.addEvents(listOf(MetrixEventEntity(player.id, id, id in ids)))
                             val event = knownEvents[id]
-                            if (automatic && event?.outcome == "HISTORY_LIMIT" && event.checkedAt != null &&
+                            if (automatic && (event?.outcome == "HISTORY_METADATA_MISSING" || event?.outcome == "HISTORY_LIMIT" && knownRounds[id]?.id in knownEntries) && event.checkedAt != null &&
                                 attempted - event.checkedAt in 0 until 86_400_000L) {
                                 reason = "HISTORY_LIMIT"
                                 processed++
@@ -194,6 +194,18 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                             } catch (e: MetrixImportException) {
                                 dao.eventOutcome(player.id, id, e.reason, now())
                                 reason = e.reason // Continue other rounds after a per-result permission/format failure.
+                                if (e.reason == "HISTORY_LIMIT" && entry == null) {
+                                    try {
+                                        delay(requestDelayMillis)
+                                        val metadata = metrix.publicEvent(id)?.let { parsePublicMetrixVisit(it, id, player, now()) }
+                                        if (metadata != null) {
+                                            db.withTransaction { persist(metadata) }
+                                            imported++; matched = true
+                                        } else dao.eventOutcome(player.id, id, "HISTORY_METADATA_MISSING", now())
+                                    } catch (cancel: CancellationException) { throw cancel }
+                                    catch (_: MetrixConnectionException) { /* Keep the blocked event for a later retry. */ }
+                                    catch (_: InvalidIntegrationCodeException) { /* Public page unavailable. */ }
+                                }
                             }
                             processed++
                         }

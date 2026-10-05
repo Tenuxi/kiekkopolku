@@ -9,3 +9,7 @@
 .DS_Store
 __pycache__/
 *.pyc
+
+# Local release signing identity and passwords; back up outside Git.
+**/.signing/
+**/signing.properties

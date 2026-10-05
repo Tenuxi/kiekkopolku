@@ -1,4 +1,4 @@
-# Kiekkopolku Android — 0.4.0
+# Kiekkopolku Android — 0.5.0
 
 Itsenäisesti Android Studiossa avattava Android-projekti. ApplicationId: `fi.kiekkopolku.app` (testiversio: `fi.kiekkopolku.app.debug`). Kotlin, Compose, Material 3, Room, Flow ja Hilt. MinSdk 26, compile/targetSdk 35. Integraatiokoodin tarkistus käyttää Metrixin dokumentoitua API:a. Koodi tallennetaan salattuna Android Keystoren avulla. Oikean kierroshistorian tuonti käyttää `my_competitions`- ja `result`-kutsuja.
 
@@ -25,7 +25,7 @@ Sovelluksen avautuminen käynnistää tallennettujen oikeiden pelaajien taustap�
 
 Paikallisen MVP:n kolme repository-rajapintaa toteuttaa yksi luokka; verkkosopimus on erillisessä MetrixApi-rajapinnassa ja tulosten muunnos MetrixImport-tiedostossa. UI näkee vain domain-mallit. Metrix- ja metadatalähteiden rajapinnat on erotettu; Metrix-tuonti perustuu dokumentaatioon sekä julkisista oikeista tuloksista tarkistettuihin rakenteisiin. OkHttp hoitaa HTTPS-pyynnöt ja Kotlin Serialization JSON-jäsennyksen. Vain tallennetun pelaaja-ID:n tulokset kirjoitetaan Roomiin. Integraatiokoodin omistaja-ID:tä ei arvata eikä selainprofiilia kaavita.
 
-Navigaatio on pieni `rememberSaveable`-pohjainen tila ja Androidin takaisin-toiminto, ei erillistä navigaatiokehystä. Kartta käyttää MapLibre Native 11.13.5:tä ja OpenFreeMapin tummaa tyyliä. Lähekkäiset ratamerkit ryhmitellään ja merkin kautta voi avata radan historian. Kartta ei tarvitse API-avainta tai laitteen sijaintilupaa. Hyväksymätöntä logoluonnosta ei ole muutettu lopulliseksi launcher-resurssiksi; tässä testiversiossa käytetään Androidin oletuskuvaketta.
+Navigaatio on pieni `rememberSaveable`-pohjainen tila ja Androidin takaisin-toiminto, ei erillistä navigaatiokehystä. Kartta käyttää MapLibre Native 11.13.5:tä ja OpenFreeMapin vaaleaa Positron-tyyliä. Lähekkäiset ratamerkit ryhmitellään ja merkin kautta voi avata radan historian. Kartta ei tarvitse API-avainta tai laitteen sijaintilupaa. Sovelluksella on oma harmaa karttapinni–kori-kuvake, adaptive- ja monochrome-resurssit sekä splash-logo.
 
 ## Versiointi
 
@@ -44,3 +44,11 @@ Ratojen `course`-kutsusta tuodaan Lat/Lng, kaupunki, maa ja ParentID. Tallennetu
 Karttapohja vaatii verkkoyhteyden tai SDK:n aiemman välimuistin; koko Suomen offline-karttaa ei luvata. Tiedossa olevat radat, koordinaatit ja historia säilyvät laitteessa. Karttapalvelu saa karttaruutupyynnöt; pelaajien nimiä, tuloksia ja Metrix-koodeja ei lähetetä sille. Tekijät: OpenFreeMap, OpenMapTiles ja OpenStreetMap.
 
 [Version 0.4.0 julkaisumuistio](../docs/RELEASE-0.4.0.md).
+
+## Versio 0.5.0 ja allekirjoitus
+
+Vanhan API-tuloskortin estyessä sovellus yrittää julkista tapahtumasivua ilman integraatiokoodia tai kirjautumista. Vain täsmälleen vastaavan pelaajan varmennettu pelattu käynti, radan ID/nimi ja päivä tallennetaan. Rekisteröitymiset, epäselvät sivut ja koontitapahtumat eivät muutu automaattisesti kierroksiksi. Sivurakenteen muuttuessa tietoja voi jäädä puuttumaan. Tuloskortit haetaan edelleen vain API:sta. Varmennetut käynnit tallentuvat Roomiin; nimet ja koordinaatit täydennetään course-API:sta. Puuttuvia koordinaatteja ei arvata.
+
+Release käyttää paikallista `.signing/release.properties`-tiedostoa (storeFile, storePassword, keyAlias, keyPassword) ja sen osoittamaa keystorea. Molemmat on suljettu Gitistä. Julkaisukoneen avain on `.signing/release.jks`. **Varmuuskopioi koko .signing-kansio turvallisesti:** sama avain tarvitaan tuleviin päivityksiin. Kloonattu projekti ei rakenna release-pakettia ilman allekirjoitusasetuksia. Rakenna `./gradlew :app:assembleRelease` ja tarkista `apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk`.
+
+Release (`fi.kiekkopolku.app`) ja debug (`fi.kiekkopolku.app.debug`) ovat erillisiä asennuksia ja tietovarastoja. Nykyisen testiversion päivitys tehdään debug-APK:lla alkuperäisellä debug-avaimella. Release tarvitsee profiilien lisäyksen uudelleen. Allekirjoitus todentaa paketin ja mahdollistaa päivitykset; se ei takaa Play Protect -varoitusten poistumista.

@@ -22,6 +22,7 @@ class MetrixSyncTest {
     private val secrets = mutableMapOf<String, String>()
     private var timestamp = 100_000L
     private val calls = mutableListOf<String>()
+    private var publicHtml: String? = null
     private var response: suspend (String, String?) -> JsonObject = { content, id ->
         if (content == "my_competitions") json("""{"my_competitions":[101, "101"],"Errors":[]}""") else round(id!!)
     }
@@ -31,15 +32,41 @@ class MetrixSyncTest {
             override suspend fun get(playerId: String) = secrets[playerId]
             override suspend fun put(playerId: String, code: String) { secrets[playerId] = code }
             override suspend fun remove(playerId: String) { secrets.remove(playerId) }
-        }, verifier = IntegrationCodeVerifier { }, metrix = MetrixApi { content, _, id ->
+        }, verifier = IntegrationCodeVerifier { }, metrix = object : MetrixApi {
+            override suspend fun publicEvent(id: String): String? { calls += "public:$id"; return publicHtml }
+            override suspend fun get(content: String, code: String, id: String?): JsonObject {
             calls += "$content:$id"
-            if (content == "course") json("""{"course":{"ID":"$id","ParentID":"800000","Fullname":"Testirata","Lat":"61.5","Lng":"23.7"},"Errors":[]}""")
+            return if (content == "course") json("""{"course":{"ID":"$id","ParentID":"800000","Fullname":"Testirata","Lat":"61.5","Lng":"23.7"},"Errors":[]}""")
             else response(content, id)
+            }
         }, requestDelayMillis = 0)
     }
     @After fun close() { db.close() }
     private suspend fun add(id: String = "424242") = repo.addPlayer(id, "Oma", "synthetic-code-$id")
 
+    @Test fun blockedHistoryGetsCachedVisitAndCourseWithoutInventingScorecard() = runBlocking {
+        add()
+        publicHtml = publicVisitHtml()
+        response = { content, _ -> if (content == "my_competitions") json("""{"my_competitions":[101]}""")
+            else json("""{"Competition":null,"Errors":["data older than year"]}""") }
+        assertEquals(RefreshResult.PARTIAL, repo.refreshSelected())
+        val h = repo.snapshot()
+        assertEquals(1, h.stats().rounds)
+        assertEquals(1, h.coverage().blockedCards)
+        assertEquals("METADATA_ONLY", h.entries.single().status)
+        assertNull(h.entries.single().total)
+        assertTrue(h.entries.single().holes.isEmpty())
+        assertTrue(h.courses.single().hasLocation)
+        repo.refreshOnOpen()
+        assertEquals(1, calls.count { it == "public:101" })
+        repo.refreshSelected()
+        assertEquals(1, repo.snapshot().stats().rounds)
+        assertEquals(1, calls.count { it == "public:101" })
+        response = { content, id -> if (content == "my_competitions") json("""{"my_competitions":[101]}""") else round(id!!) }
+        repo.refreshSelected()
+        assertEquals("FINISHED", repo.snapshot().entries.single().status)
+        assertEquals(2, repo.snapshot().entries.single().holes.size)
+    }
     @Test fun importIsIdempotentAndPersistsOnlyLinkedPlayerWithExactHoles() = runBlocking {
         add()
         assertEquals(RefreshResult.UPDATED_METRIX, repo.refreshSelected())

@@ -199,6 +199,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
             Text(history.players.first { it.id == entry.playerId }.name)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Muted(date(entry.date)); Text(result(entry), fontWeight = FontWeight.Bold) }
             entry.layout?.let { Muted(it) }
+            if (entry.status == "METADATA_ONLY") Muted(stringResource(R.string.historical_scorecard_missing))
             if (entry.status == "DNF") Muted(stringResource(R.string.dnf))
             if (entry.status == "IN_PROGRESS") Muted(stringResource(R.string.round_in_progress))
         }
@@ -241,6 +242,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         item { Text(result(entry), style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary) }
         item { entry.layout?.let { Muted(stringResource(R.string.layout, it)) }; entry.tee?.let { Muted(stringResource(R.string.tee, it)) } }
         item { Muted(stringResource(if (entry.source == "sample") R.string.sample_round_id else R.string.round_id, entry.externalId)) }
+        if (entry.status == "METADATA_ONLY") item { Muted(stringResource(R.string.historical_scorecard_missing)) }
         if (!entry.completeHoles) item { Muted(pluralStringResource(R.plurals.missing_holes, 1, 1)) }
         if (entry.status == "DNF") item { Muted(stringResource(R.string.dnf)) }
         if (entry.holes.isEmpty()) item { Muted(stringResource(R.string.no_holes)) }
@@ -285,6 +287,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
             Text(stringResource(R.string.metrix_coverage), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.metrix_list_count, coverage.listedEvents))
             Text(stringResource(R.string.metrix_blocked_count, coverage.blockedCards))
+            Text(stringResource(R.string.map_history_limit, entries.count { it.status == "METADATA_ONLY" }, history.unresolvedHistoricalEvents()))
             if (coverage.otherUnavailable > 0) Text(stringResource(R.string.metrix_other_count, coverage.otherUnavailable))
             if (coverage.pending > 0) Text(stringResource(R.string.metrix_pending_count, coverage.pending))
             Muted(stringResource(R.string.event_list_help))

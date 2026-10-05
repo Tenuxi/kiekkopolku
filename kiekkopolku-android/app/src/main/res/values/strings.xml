@@ -120,7 +120,7 @@
     <string name="map_course_detail">Kierroksia: %1$d · viimeksi %2$s</string>
     <string name="map_fit">Näytä kaikki</string>
     <string name="map_load_failed">Taustakarttaa ei voitu ladata. Tarkista verkkoyhteys. Tallennettu historia on edelleen ratalistassa.</string>
-    <string name="map_history_limit">Kartta sisältää tallennetut pelatut radat. Estettyjen tapahtumien ratatietoja ei voida päätellä pelkästä tunnisteesta.</string>
+    <string name="map_history_limit">Vanhoja käyntejä ilman tuloskorttia: %1$d. Rajoitettuja tapahtumia ilman varmennettua ratakäyntiä: %2$d.</string>
     <string name="map_no_courses">Pelattuja ratoja ei ole vielä tallennettu. Lisää Metrix-tiedot ja päivitä historia.</string>
     <string name="sync_courses">Haetaan ratatietoja: %1$s</string>
     <string name="sync_course_failed">Kaikkien ratojen sijaintitietoja ei saatu. Kierrokset säilyvät; sijainnit haetaan uudelleen päivityksessä.</string>
@@ -138,4 +138,7 @@
     <string name="stats_history_limit">Metrix on rajoittanut yli vuoden vanhojen tuloskorttien hakua. Tulos- ja ace-tilastot kattavat vain saatavilla olevat kortit. Aiemmin tallennetut vanhat kierrokset säilyvät koko historian luvuissa.</string>
     <string name="stats_date_range">Ajanjakso: %1$s – %2$s. Vain saatavilla olevat tulokset.</string>
     <string name="physical_course_help">Saman radan layoutit yhdistetään ratamäärässä Metrixin parent-tunnisteella. Jos yhteyttä ei ole saatavilla, layout lasketaan omaksi ratakohteekseen.</string>
+    <string name="map_legend">Vihreä: pelattu viimeisen 12 kk aikana · Oranssi: vain vanhempia käyntejä · Harmaa: ajankohta tai tuloskortti epäselvä</string>
+    <string name="historical_scorecard_missing">Tuloskortteja ei saatavilla yli vuoden takaisille kierroksille.</string>
+    <string name="historical_scorecard_cached">Vain vanhempia käyntejä. Aiemmin tallennetut tulostiedot ovat edelleen käytettävissä.</string>
 </resources>

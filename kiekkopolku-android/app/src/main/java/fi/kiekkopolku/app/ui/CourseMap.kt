@@ -5,6 +5,11 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.RectF
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import java.time.LocalDate
 import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,12 +42,39 @@ import org.maplibre.android.style.layers.PropertyFactory.*
 import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 
-private const val STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
+private const val STYLE_URL = "https://tiles.openfreemap.org/styles/positron"
 private const val SOURCE = "played-courses"
 private const val POINTS = "played-points"
 private const val CLUSTERS = "played-clusters"
 
 /** Coordinates and opaque local IDs only; no players, scores or credentials are sent to the tile provider. */
+internal fun markerKind(visit: CourseVisit, today: LocalDate = LocalDate.now()): String = when {
+    visit.entries.any { it.date >= today.minusYears(1).toString() && it.date <= today.toString() && it.status != "METADATA_ONLY" } -> "recent"
+    visit.entries.all { it.date < today.minusYears(1).toString() } -> "historic"
+    else -> "unknown"
+}
+
+/** Draw at device density so pins remain crisp without shipping raster map assets. */
+private fun coursePin(density: Float, color: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap((36 * density).toInt(), (46 * density).toInt(), Bitmap.Config.ARGB_8888)
+    bitmap.density = (160 * density).toInt()
+    val canvas = Canvas(bitmap).apply { scale(density, density) }
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val pin = Path().apply {
+        moveTo(18f, 44f); cubicTo(14f, 37f, 2f, 26f, 2f, 18f)
+        cubicTo(2f, -3f, 34f, -3f, 34f, 18f); cubicTo(34f, 26f, 22f, 37f, 18f, 44f); close()
+    }
+    paint.color = color; canvas.drawPath(pin, paint)
+    paint.color = Color.WHITE; paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.8f
+    canvas.drawPath(pin, paint)
+    paint.strokeCap = Paint.Cap.ROUND
+    canvas.drawLine(10f, 12f, 26f, 12f, paint)
+    canvas.drawLine(18f, 9f, 18f, 29f, paint)
+    canvas.drawLine(12f, 14f, 15f, 22f, paint); canvas.drawLine(24f, 14f, 21f, 22f, paint)
+    canvas.drawPath(Path().apply { moveTo(10f, 22f); lineTo(13f, 26f); lineTo(23f, 26f); lineTo(26f, 22f); close() }, paint)
+    return bitmap
+}
+
 internal fun mapFeatures(visits: List<CourseVisit>): String = buildJsonObject {
     put("type", "FeatureCollection")
     put("features", buildJsonArray {
@@ -52,7 +84,7 @@ internal fun mapFeatures(visits: List<CourseVisit>): String = buildJsonObject {
                 put("type", "Point")
                 put("coordinates", buildJsonArray { add(visit.course.longitude!!); add(visit.course.latitude!!) })
             })
-            put("properties", buildJsonObject { put("courseId", visit.course.id) })
+            put("properties", buildJsonObject { put("courseId", visit.course.id); put("marker", markerKind(visit)) })
         }) }
     })
 }.toString()
@@ -71,7 +103,9 @@ internal fun CourseMap(history: History, open: (String) -> Unit,
                 Text(stringResource(R.string.map_missing_count, visits.size - located.size))
             }
         }
-        if (history.coverage().blockedCards > 0) Text(stringResource(R.string.map_history_limit),
+        Text(stringResource(R.string.map_legend), style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        if (history.coverage().blockedCards > 0) Text(stringResource(R.string.map_history_limit, history.selectedEntries().count { it.status == "METADATA_ONLY" }, history.unresolvedHistoricalEvents()),
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         if (visits.isEmpty()) Text(stringResource(R.string.map_no_courses), modifier = Modifier.padding(16.dp))
         Box(Modifier.weight(1f)) { mapContent(located) { selectedIds = it } }
@@ -85,6 +119,10 @@ internal fun CourseMap(history: History, open: (String) -> Unit,
                 Column(Modifier.fillMaxWidth()) {
                     Text(visit.course.name)
                     Text(stringResource(R.string.map_course_detail, visit.entries.size, visit.last), style = MaterialTheme.typography.bodySmall)
+                    if (visit.entries.any { it.status == "METADATA_ONLY" })
+                        Text(stringResource(R.string.historical_scorecard_missing), style = MaterialTheme.typography.bodySmall)
+                    else if (markerKind(visit) == "historic")
+                        Text(stringResource(R.string.historical_scorecard_cached), style = MaterialTheme.typography.bodySmall)
                 }
             } }
         } }, confirmButton = { TextButton(onClick = { selectedIds = emptyList(); showMissing = false }) { Text(stringResource(R.string.close)) } })
@@ -112,8 +150,12 @@ private fun NativeCourseMap(visits: List<CourseVisit>, select: (List<String>) ->
             if (!disposed) {
                 style.addSource(GeoJsonSource(SOURCE, "{\"type\":\"FeatureCollection\",\"features\":[]}",
                     GeoJsonOptions().withCluster(true).withClusterRadius(48).withClusterMaxZoom(14)))
-                style.addLayer(CircleLayer(POINTS, SOURCE).withFilter(not(has("point_count")))
-                    .withProperties(circleRadius(9f), circleColor(Color.WHITE), circleStrokeWidth(3f), circleStrokeColor(Color.DKGRAY)))
+                val density = context.resources.displayMetrics.density
+                style.addImage("recent", coursePin(density, Color.rgb(35, 125, 80)))
+                style.addImage("historic", coursePin(density, Color.rgb(190, 91, 21)))
+                style.addImage("unknown", coursePin(density, Color.DKGRAY))
+                style.addLayer(SymbolLayer(POINTS, SOURCE).withFilter(not(has("point_count")))
+                    .withProperties(iconImage(get("marker")), iconAnchor("bottom"), iconAllowOverlap(true), iconIgnorePlacement(true)))
                 style.addLayer(CircleLayer(CLUSTERS, SOURCE).withFilter(has("point_count"))
                     .withProperties(circleRadius(22f), circleColor(Color.LTGRAY), circleStrokeWidth(2f), circleStrokeColor(Color.WHITE)))
                 style.addLayer(SymbolLayer("played-counts", SOURCE).withFilter(has("point_count"))

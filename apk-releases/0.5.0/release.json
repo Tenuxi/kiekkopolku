@@ -1,0 +1,21 @@
+{
+  "versionName": "0.5.0",
+  "versionCode": 5,
+  "minSdk": 26,
+  "sourceTag": "v0.5.0",
+  "artifacts": [
+    {
+      "artifact": "kiekkopolku-0.5.0-debug.apk",
+      "buildType": "debug",
+      "applicationId": "fi.kiekkopolku.app.debug",
+      "sha256": "650a8ac62f6f8ac8507cad8c838bec036b537fea15891b08e7bfd6ad3acf8ea5"
+    },
+    {
+      "artifact": "kiekkopolku-0.5.0-release.apk",
+      "buildType": "release",
+      "applicationId": "fi.kiekkopolku.app",
+      "sha256": "72a3d2262c133bd558ed3630bb92e3a7763a613465de5a30221463654d0610e2"
+    }
+  ],
+  "note": "Debug updates existing test installations. Release uses a separate application ID and production signing key; profiles must be added again."
+}
