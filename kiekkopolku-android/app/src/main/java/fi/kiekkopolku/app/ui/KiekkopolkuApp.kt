@@ -18,6 +18,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
@@ -64,6 +69,13 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
     MaterialTheme(colorScheme = colors) {
         val state by vm.state.collectAsStateWithLifecycle()
         val busy by vm.busy.collectAsStateWithLifecycle()
+        val progress by vm.progress.collectAsStateWithLifecycle()
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        DisposableEffect(lifecycle, vm) {
+            val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) vm.onOpen() }
+            lifecycle.addObserver(observer)
+            onDispose { lifecycle.removeObserver(observer) }
+        }
         val message by vm.message.collectAsStateWithLifecycle()
         val history = state.history
         var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -84,7 +96,12 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
             topBar = { TopAppBar(title = { Text(stringResource(if (profiles) R.string.profiles else R.string.app_name)) },
                 navigationIcon = { if (nested) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
                 actions = {
-                    IconButton(onClick = vm::refresh, enabled = !busy) { Icon(Icons.Default.Refresh, stringResource(R.string.refresh)) }
+                    if (busy) {
+                        val description = stringResource(R.string.sync_loading)
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(24.dp).semantics { contentDescription = description }, strokeWidth = 2.dp)
+                        }
+                    } else IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, stringResource(R.string.refresh)) }
                     if (!profiles) IconButton(onClick = { profiles = true; courseId = null; roundId = null }) { Icon(Icons.Default.PeopleOutline, stringResource(R.string.profiles)) }
                 }) },
             bottomBar = { if (!profiles) NavigationBar { labels.forEachIndexed { index, label ->
@@ -93,13 +110,14 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
             } } },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                progress?.let { Text(stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
+                    style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
                 Text(stringResource(R.string.local_mode), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 if (history.players.any { it.sample && it.active }) Text(stringResource(R.string.sample_banner),
                     style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp))
                 if (!profiles && history.players.isNotEmpty()) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(history.players, key = { it.id }) { p -> FilterChip(selected = p.active, enabled = !busy,
+                    items(history.players, key = { it.id }) { p -> FilterChip(selected = p.active,
                         onClick = { vm.select(p.id, !p.active) }, label = { Text(p.name) },
                         leadingIcon = { if (p.active) Icon(Icons.Default.Check, null, Modifier.size(18.dp)) else PlayerDot(p.color) }) }
                 }
@@ -112,7 +130,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
                     history.activePlayers.isEmpty() -> Notice(R.string.select_players)
                     roundId != null -> RoundDetail(history, entries.find { it.roundId == roundId && it.playerId == roundPlayerId })
                     courseId != null -> CourseDetail(history, courseId!!) { roundId = it.roundId; roundPlayerId = it.playerId }
-                    entries.isEmpty() -> Notice(R.string.no_rounds, R.string.no_rounds_body)
+                    entries.isEmpty() -> Notice(R.string.no_rounds, R.string.no_rounds_body, action = { profiles = true }, actionLabel = R.string.profiles)
                     tab == 0 -> Courses(history) { courseId = it }
                     tab == 1 -> RoundList(history, entries) { roundId = it.roundId; roundPlayerId = it.playerId }
                     tab == 2 -> Aces(history) { roundId = it.roundId; roundPlayerId = it.playerId }
@@ -180,6 +198,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Muted(date(entry.date)); Text(result(entry), fontWeight = FontWeight.Bold) }
             entry.layout?.let { Muted(it) }
             if (entry.status == "DNF") Muted(stringResource(R.string.dnf))
+            if (entry.status == "IN_PROGRESS") Muted(stringResource(R.string.round_in_progress))
         }
     }
 }
@@ -275,18 +294,19 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
     var add by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Player?>(null) }
     var removeSample by remember { mutableStateOf(false) }
+    var initialProfileId by rememberSaveable { mutableStateOf<String?>(null) }
     var initialId by rememberSaveable { mutableStateOf("") }
     var initialName by rememberSaveable { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     if (add) {
         BackHandler { add = false }
-        AddPlayerForm(initialId, initialName, busy, onDismiss = { add = false }, onSave = { id, name, code -> vm.add(id, name, code) { add = false } })
+        AddPlayerForm(initialId, initialName, busy, onDismiss = { add = false }, onSave = { id, name, code -> vm.add(id, name, code, initialProfileId) { add = false } })
         return
     }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Title(stringResource(R.string.profiles)); Muted(stringResource(R.string.version, BuildConfig.VERSION_NAME)) }
         item { Muted(stringResource(R.string.metrix_not_connected)) }
-        item { Button(onClick = { initialId = ""; initialName = ""; add = true }, enabled = !busy) { Icon(Icons.Default.Add, null); Text(stringResource(R.string.add_player)) } }
+        item { Button(onClick = { initialProfileId = null; initialId = ""; initialName = ""; add = true }, enabled = !busy) { Icon(Icons.Default.Add, null); Text(stringResource(R.string.add_player)) } }
         items(history.players, key = { it.id }) { p -> Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { PlayerDot(p.color); Spacer(Modifier.width(8.dp)); Text(p.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)); IconButton(onClick = { deleting = p }, enabled = !busy) { Icon(Icons.Default.DeleteOutline, stringResource(R.string.delete_player, p.name)) } }
@@ -297,13 +317,15 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
                 })
                 if (!p.sample) {
                     Muted(stringResource(if (p.hasIntegrationCode) R.string.code_present else R.string.code_absent))
-                    TextButton(onClick = { initialId = p.metrixId.orEmpty(); initialName = p.name; add = true }, enabled = !busy) {
+                    TextButton(onClick = { initialProfileId = p.id; initialId = p.metrixId.orEmpty(); initialName = p.name; add = true }, enabled = !busy) {
                         Text(stringResource(R.string.connect_code))
                     }
                     p.metrixId?.let { id -> TextButton(onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discgolfmetrix.com/player/$id")))
                     }) { Text(stringResource(R.string.open_profile)) } }
                 }
+                if (!p.sample) p.syncError?.let { Muted(stringResource(syncErrorText(it))) }
+                if (!p.sample && p.syncStatus == "SUCCESS") Muted(stringResource(R.string.sync_available))
                 Muted(p.lastSyncAt?.let { stringResource(R.string.last_updated, updated(it)) } ?: stringResource(R.string.never_synced))
             }
         } }
@@ -341,4 +363,16 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
         item { Button(onClick = { onSave(rawId, name.trim().ifEmpty { defaultName }, code) }, enabled = valid && !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (busy) R.string.saving else R.string.save)) } }
         item { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) } }
     }
+}
+
+private fun syncErrorText(code: String): Int = when (code) {
+    "NEEDS_ID" -> R.string.sync_needs_id
+    "NEEDS_CODE" -> R.string.sync_needs_code
+    "INVALID_CODE" -> R.string.invalid_code
+    "HISTORY_LIMIT" -> R.string.sync_history_limit
+    "ACCESS" -> R.string.sync_access
+    "NO_RESULTS" -> R.string.sync_no_results
+    "UNSUPPORTED" -> R.string.sync_unsupported
+    "CONNECTION" -> R.string.sync_connection
+    else -> R.string.sync_response
 }

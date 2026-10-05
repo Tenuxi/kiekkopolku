@@ -1,7 +1,7 @@
 package fi.kiekkopolku.app.domain
 
 data class Player(val id: String, val metrixId: String?, val name: String, val color: Int,
-    val active: Boolean, val sample: Boolean, val lastSyncAt: Long?, val hasIntegrationCode: Boolean = false)
+    val active: Boolean, val sample: Boolean, val lastSyncAt: Long?, val hasIntegrationCode: Boolean = false, val syncStatus: String? = null, val syncError: String? = null)
 data class Course(val id: String, val name: String, val city: String?, val country: String?,
     val latitude: Double?, val longitude: Double?)
 data class Hole(val ordinal: Int, val label: String, val par: Int?, val score: Int?)
@@ -9,7 +9,7 @@ data class RoundEntry(val roundId: String, val externalId: String, val source: S
     val playerId: String, val courseId: String?, val date: String, val layout: String?, val tee: String?,
     val total: Int?, val relative: Int?, val status: String, val individual: Boolean,
     val completeHoles: Boolean, val holes: List<Hole>) {
-    val played: Boolean get() = status == "FINISHED" || (status == "DNF" && holes.any { (it.score ?: 0) > 0 })
+    val played: Boolean get() = status == "FINISHED" || (status in listOf("DNF", "IN_PROGRESS") && holes.any { (it.score ?: 0) > 0 })
 }
 data class History(val players: List<Player> = emptyList(), val courses: List<Course> = emptyList(),
     val entries: List<RoundEntry> = emptyList()) {

@@ -25,6 +25,6 @@ sha = hashlib.sha256(apk.read_bytes()).hexdigest()
 (target / "release.json").write_text(json.dumps({
     "applicationId": metadata["applicationId"], "versionName": name, "versionCode": int(code),
     "artifact": apk.name, "sha256": sha, "buildType": "debug", "minSdk": 26,
-    "sourceTag": f"v{name}", "note": "Test APK. Metrix history import is not implemented."
+    "sourceTag": f"v{name}", "note": "Test APK. Metrix history import requires player ID and integration code; provider access limits apply."
 }, indent=2) + "\n")
 print(apk)

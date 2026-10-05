@@ -18,9 +18,10 @@ object AppModule {
         Room.databaseBuilder(context, KiekkopolkuDatabase::class.java, "kiekkopolku.db")
             .addMigrations(KiekkopolkuDatabase.MIGRATION_1_2).build()
     @Provides @Singleton fun credentials(@ApplicationContext context: Context): CredentialStore = EncryptedCredentialStore(context)
-    @Provides @Singleton fun verifier(): IntegrationCodeVerifier = MetrixCodeVerifier()
-    @Provides @Singleton fun repository(db: KiekkopolkuDatabase, credentials: CredentialStore, verifier: IntegrationCodeVerifier) =
-        LocalHistoryRepository(db, credentials = credentials, verifier = verifier)
+    @Provides @Singleton fun metrix(): MetrixApi = MetrixHttpApi()
+    @Provides @Singleton fun verifier(api: MetrixApi): IntegrationCodeVerifier = MetrixCodeVerifier(api)
+    @Provides @Singleton fun repository(db: KiekkopolkuDatabase, credentials: CredentialStore, verifier: IntegrationCodeVerifier, api: MetrixApi) =
+        LocalHistoryRepository(db, credentials = credentials, verifier = verifier, metrix = api)
     @Provides fun history(repo: LocalHistoryRepository): HistoryRepository = repo
     @Provides fun players(repo: LocalHistoryRepository): PlayerRepository = repo
     @Provides fun sync(repo: LocalHistoryRepository): SyncRepository = repo

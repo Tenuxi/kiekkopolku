@@ -11,6 +11,8 @@ import fi.kiekkopolku.app.domain.*
 import fi.kiekkopolku.app.ui.HistoryViewModel
 import fi.kiekkopolku.app.ui.KiekkopolkuApp
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,7 +27,19 @@ class UiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private class Fake : HistoryRepository, PlayerRepository, SyncRepository {
         override val history = MutableStateFlow(History())
-        override suspend fun addPlayer(metrixId: String, name: String, integrationCode: String) {
+        var opened = 0
+        var refreshGate: CompletableDeferred<Unit>? = null
+        override val progress = MutableStateFlow<SyncProgress?>(null)
+        override suspend fun refreshOnOpen(): RefreshResult {
+            opened++
+            if (refreshGate != null) {
+                progress.value = SyncProgress("Testipelaaja", 1, 3)
+                refreshGate!!.await()
+                progress.value = null
+            }
+            return RefreshResult.UPDATED_METRIX
+        }
+        override suspend fun addPlayer(metrixId: String, name: String, integrationCode: String, profileId: String?) {
             history.value = history.value.copy(players = history.value.players + Player(metrixId.ifBlank { "linked" }, metrixId.ifBlank { null }, name, 0, true, false, null, integrationCode.isNotBlank()))
         }
         override suspend fun selectPlayer(id: String, selected: Boolean) { history.value = history.value.copy(players = history.value.players.map { if (it.id == id) it.copy(active = selected) else it }) }
@@ -44,6 +58,26 @@ class UiTest {
         compose.setContent { KiekkopolkuApp(vm) }
         compose.waitForIdle()
         return fake
+    }
+    @Test fun openingRefreshShowsSpinnerWhileCachedRoundsRemainNavigable() {
+        val fake = Fake()
+        runBlocking { fake.loadSample() }
+        val gate = CompletableDeferred<Unit>()
+        fake.refreshGate = gate
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { KiekkopolkuApp(vm) }
+        compose.onNodeWithContentDescription("Päivitetään Metrix-tietoja").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Päivitä tiedot").assertDoesNotExist()
+        compose.onNodeWithText("Metsäpolku").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Koordinaatteja ei ole tallennettu.").assertIsDisplayed()
+        compose.runOnIdle {
+            org.junit.Assert.assertEquals(1, fake.opened)
+            vm.onOpen() // Busy/rotation guards must not enqueue another import.
+            org.junit.Assert.assertEquals(1, fake.opened)
+            gate.complete(Unit)
+        }
+        compose.onNodeWithContentDescription("Päivitä tiedot").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Päivitetään Metrix-tietoja").assertDoesNotExist()
     }
     @Test fun welcomeSampleCourseAndHoleNavigation() {
         start()

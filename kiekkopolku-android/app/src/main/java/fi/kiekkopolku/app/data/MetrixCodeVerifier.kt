@@ -15,14 +15,22 @@ import kotlin.coroutines.resumeWithException
 fun interface IntegrationCodeVerifier { suspend fun verify(code: String) }
 
 /** Only the documented my_competitions endpoint is used. No owner-ID inference or history scraping. */
-class MetrixCodeVerifier : IntegrationCodeVerifier {
+class MetrixCodeVerifier(private val api: MetrixApi = MetrixHttpApi()) : IntegrationCodeVerifier {
+    override suspend fun verify(code: String) { validateMetrixCodeResponse(api.get("my_competitions", code).toString()) }
+}
+
+fun interface MetrixApi { suspend fun get(content: String, code: String, id: String?): JsonObject }
+suspend fun MetrixApi.get(content: String, code: String): JsonObject = get(content, code, null)
+
+class MetrixHttpApi : MetrixApi {
     private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS)
         .build() // Deliberately no URL/body logging or disk HTTP cache: code is a credential query parameter.
 
-    override suspend fun verify(code: String) {
+    override suspend fun get(content: String, code: String, id: String?): JsonObject {
         val request = Request.Builder().url("https://discgolfmetrix.com/api.php".toHttpUrl().newBuilder()
-            .addQueryParameter("content", "my_competitions").addQueryParameter("code", code).build())
+            .addQueryParameter("content", content).addQueryParameter("code", code)
+            .apply { if (id != null) addQueryParameter("id", id) }.build())
             .header("Cache-Control", "no-store").build()
         val response = suspendCancellableCoroutine<Response> { continuation ->
             val call = client.newCall(request)
@@ -36,15 +44,16 @@ class MetrixCodeVerifier : IntegrationCodeVerifier {
                 }
             })
         }
-        response.use {
+        return response.use {
             if (it.code == 401 || it.code == 403) throw InvalidIntegrationCodeException()
             if (!it.isSuccessful) throw MetrixConnectionException()
             withContext(Dispatchers.IO) {
                 try {
                     val source = it.body?.source() ?: throw MetrixConnectionException()
-                    source.request(1_048_577L)
-                    if (source.buffer.size > 1_048_576L) throw MetrixConnectionException()
-                    validateMetrixCodeResponse(source.buffer.readUtf8())
+                    source.request(8_388_609L)
+                    if (source.buffer.size > 8_388_608L) throw MetrixConnectionException()
+                    runCatching { Json.parseToJsonElement(source.buffer.readUtf8()) as? JsonObject }.getOrNull()
+                        ?: throw MetrixConnectionException()
                 } catch (_: IOException) { throw MetrixConnectionException() }
             }
         }

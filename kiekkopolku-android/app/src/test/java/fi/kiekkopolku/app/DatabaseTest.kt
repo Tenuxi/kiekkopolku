@@ -126,7 +126,7 @@ class DatabaseTest {
         repo.addPlayer("123", "Oma"); repo.loadSample(); repo.removeSample()
         assertEquals(1, repo.snapshot().players.size)
         assertTrue(db.history().rounds().isEmpty()); assertTrue(db.history().courses().isEmpty())
-        assertEquals(RefreshResult.METRIX_NOT_CONNECTED, repo.refreshSelected())
+        assertEquals(RefreshResult.FAILED, repo.refreshSelected())
         assertNull(repo.snapshot().players.single().lastSyncAt)
     }
     @Test fun selectionControlsAllAggregates() = runBlocking {
