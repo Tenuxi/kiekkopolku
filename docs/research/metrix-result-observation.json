@@ -1,0 +1,18 @@
+{
+  "top_keys": [
+    "Competition",
+    "Errors"
+  ],
+  "errors": [
+    "If you are interested data older than year please send us a message to dev@discgolfmetrix.com"
+  ],
+  "competition_keys": [],
+  "id": null,
+  "date": null,
+  "course_id": null,
+  "result_count": 0,
+  "first_result_keys": [],
+  "first_hole": null,
+  "first_track": null,
+  "subcompetitions_count": 0
+}
