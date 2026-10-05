@@ -22,6 +22,84 @@ class DatabaseTest {
         repo = LocalHistoryRepository(db, now = { 42L })
     }
     @After fun close() { db.close() }
+    private class TestCredentials : CredentialStore {
+        val values = mutableMapOf<String, String>()
+        override suspend fun get(playerId: String) = values[playerId]
+        override suspend fun put(playerId: String, code: String) { values[playerId] = code }
+        override suspend fun remove(playerId: String) { values.remove(playerId) }
+    }
+    @Test fun codeOnlyProfileAndIdAssociationDoNotInventOrDuplicateIdentity() = runBlocking {
+        val secrets = TestCredentials()
+        val repo = LocalHistoryRepository(db, credentials = secrets, verifier = IntegrationCodeVerifier { })
+        repo.addPlayer("", "Oma", "synthetic-code")
+        val player = repo.snapshot().players.single()
+        assertNull(player.metrixId)
+        assertTrue(player.hasIntegrationCode)
+        assertNull(player.lastSyncAt)
+        assertEquals("synthetic-code", secrets.get(player.id))
+        repo.addPlayer("00424242", "Oma", "synthetic-code")
+        assertEquals(1, repo.snapshot().players.size)
+        assertEquals("424242", repo.snapshot().players.single().metrixId)
+        assertEquals(player.id, repo.snapshot().players.single().id)
+        repo.deletePlayer(player.id)
+        assertTrue(secrets.values.isEmpty())
+    }
+    @Test fun attachingCodeToExistingIdKeepsProfileAndHistory() = runBlocking {
+        val secrets = TestCredentials()
+        val repo = LocalHistoryRepository(db, credentials = secrets, verifier = IntegrationCodeVerifier { })
+        repo.addPlayer("424242", "Oma")
+        val id = repo.snapshot().players.single().id
+        repo.addPlayer("424242", "Uusi nimi", "synthetic-code")
+        assertEquals(id, repo.snapshot().players.single().id)
+        assertEquals("Oma", repo.snapshot().players.single().name)
+        assertTrue(repo.snapshot().players.single().hasIntegrationCode)
+    }
+    @Test fun invalidCodeCreatesNeitherProfileNorSecret() = runBlocking {
+        val secrets = TestCredentials()
+        val repo = LocalHistoryRepository(db, credentials = secrets, verifier = IntegrationCodeVerifier { throw InvalidIntegrationCodeException() })
+        try { repo.addPlayer("", "Oma", "invalid-synthetic-code"); fail("Expected verification failure") }
+        catch (_: InvalidIntegrationCodeException) { }
+        assertTrue(repo.snapshot().players.isEmpty())
+        assertTrue(secrets.values.isEmpty())
+    }
+    @Test fun conflictingIdCannotReuseAnotherProfilesCode() = runBlocking {
+        val secrets = TestCredentials()
+        val repo = LocalHistoryRepository(db, credentials = secrets, verifier = IntegrationCodeVerifier { })
+        repo.addPlayer("424242", "Oma", "synthetic-code")
+        try { repo.addPlayer("424243", "Toinen", "synthetic-code"); fail("Expected conflict") }
+        catch (_: DuplicatePlayerException) { }
+        assertEquals(1, repo.snapshot().players.size)
+    }
+    @Test fun migrationPreservesV1PlayerRoundAndHole() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "migration-v1-test.db"
+        context.deleteDatabase(name)
+        val schema = javaClass.classLoader!!.getResourceAsStream("fi.kiekkopolku.app.data.KiekkopolkuDatabase/1.json")!!.bufferedReader().use { it.readText() }
+        val entities = org.json.JSONObject(schema).getJSONObject("database").getJSONArray("entities")
+        context.openOrCreateDatabase(name, 0, null).use { old ->
+            for (i in 0 until entities.length()) {
+                val entity = entities.getJSONObject(i)
+                val table = entity.getString("tableName")
+                old.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", table))
+                val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
+                for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql").replace("\${TABLE_NAME}", table))
+            }
+            old.execSQL("INSERT INTO players VALUES ('p','424242','Oma',0,'person',NULL,1,0)")
+            old.execSQL("INSERT INTO courses VALUES ('c','Rata',NULL,NULL,NULL,NULL,0)")
+            old.execSQL("INSERT INTO rounds VALUES ('r','sample','r','2026-01-01',NULL,NULL,NULL,0)")
+            old.execSQL("INSERT INTO round_players VALUES ('r','p','c',NULL,NULL,NULL,1,-2,'FINISHED','INDIVIDUAL',1)")
+            old.execSQL("INSERT INTO hole_scores VALUES ('r','p',0,'1',3,1)")
+            old.version = 1
+        }
+        val migrated = Room.databaseBuilder(context, KiekkopolkuDatabase::class.java, name).addMigrations(KiekkopolkuDatabase.MIGRATION_1_2).build()
+        try {
+            val h = LocalHistoryRepository(migrated).snapshot()
+            assertEquals("424242", h.players.single().metrixId)
+            assertFalse(h.players.single().hasIntegrationCode)
+            assertEquals(1, h.stats().aces)
+            assertEquals(1, h.stats().rounds)
+        } finally { migrated.close(); context.deleteDatabase(name) }
+    }
     @Test fun repeatedImportsDoNotDuplicateEventsPlayersOrAces() = runBlocking {
         repo.loadSample(); repo.loadSample(); repo.refreshSelected()
         assertEquals(3, db.history().players().size)

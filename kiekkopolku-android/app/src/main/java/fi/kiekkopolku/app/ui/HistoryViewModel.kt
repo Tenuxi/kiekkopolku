@@ -28,6 +28,8 @@ class HistoryViewModel @Inject constructor(history: HistoryRepository, private v
             busy.value = true
             try { block() }
             catch (e: CancellationException) { throw e }
+            catch (_: InvalidIntegrationCodeException) { message.value = R.string.invalid_code }
+            catch (_: MetrixConnectionException) { message.value = R.string.metrix_connection_failed }
             catch (_: DuplicatePlayerException) { message.value = R.string.duplicate_player }
             catch (_: IllegalArgumentException) { message.value = R.string.invalid_player }
             catch (_: Exception) { message.value = R.string.operation_failed }
@@ -36,7 +38,11 @@ class HistoryViewModel @Inject constructor(history: HistoryRepository, private v
     }
     fun retry() { reload.value++ }
     fun select(id: String, selected: Boolean) = action { players.selectPlayer(id, selected) }
-    fun add(id: String, name: String) = action { players.addPlayer(id, name); message.value = R.string.player_added }
+    fun add(id: String, name: String, code: String, onSuccess: () -> Unit) = action {
+        players.addPlayer(id, name, code)
+        message.value = if (code.isBlank()) R.string.player_added else R.string.code_saved
+        onSuccess()
+    }
     fun delete(id: String) = action { players.deletePlayer(id) }
     fun sample() = action { sync.loadSample(); message.value = R.string.sample_loaded }
     fun removeSample() = action { sync.removeSample() }

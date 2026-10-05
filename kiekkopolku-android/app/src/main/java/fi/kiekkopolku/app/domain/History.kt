@@ -1,7 +1,7 @@
 package fi.kiekkopolku.app.domain
 
-data class Player(val id: String, val metrixId: String, val name: String, val color: Int,
-    val active: Boolean, val sample: Boolean, val lastSyncAt: Long?)
+data class Player(val id: String, val metrixId: String?, val name: String, val color: Int,
+    val active: Boolean, val sample: Boolean, val lastSyncAt: Long?, val hasIntegrationCode: Boolean = false)
 data class Course(val id: String, val name: String, val city: String?, val country: String?,
     val latitude: Double?, val longitude: Double?)
 data class Hole(val ordinal: Int, val label: String, val par: Int?, val score: Int?)

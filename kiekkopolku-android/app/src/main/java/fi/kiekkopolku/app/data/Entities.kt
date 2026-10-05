@@ -4,12 +4,15 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
-@Entity(tableName = "players", indices = [Index(value = ["metrixPlayerId"], unique = true)])
+@Entity(tableName = "players", indices = [Index(value = ["metrixPlayerId"], unique = true), Index(value = ["externalPlayerId"], unique = true)])
 data class PlayerEntity(
-    @PrimaryKey val id: String, val metrixPlayerId: String, val displayName: String,
+    @PrimaryKey val id: String, @ColumnInfo(name = "metrixPlayerId") val identityKey: String, val displayName: String,
     val colorKey: Int = 0, val iconKey: String = "person", val avatarUrl: String? = null,
     val isActive: Boolean = true, val isSample: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL") val externalPlayerId: String? = identityKey.takeIf { it.matches(Regex("[0-9]+")) },
+    @ColumnInfo(defaultValue = "0") val hasIntegrationCode: Boolean = false,
 )
 
 @Entity(tableName = "courses")

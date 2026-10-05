@@ -2,7 +2,6 @@ package fi.kiekkopolku.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,6 +23,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fi.kiekkopolku.app.BuildConfig
@@ -36,7 +38,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-private val playerColors = listOf(Color(0xFF31965D), Color(0xFF557FC0), Color(0xFFAD6B40), Color(0xFF946CB0), Color(0xFF528E92))
+private val playerColors = listOf(Color(0xFFE2E2E2), Color(0xFFBDBDBD), Color(0xFF969696), Color(0xFFCBCBCB), Color(0xFFAAAAAA))
 private val pagePadding = PaddingValues(20.dp)
 private fun date(value: String) = runCatching { LocalDate.parse(value).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault())) }.getOrDefault(value)
 private fun updated(value: Long) = Instant.ofEpochMilli(value).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT))
@@ -44,11 +46,21 @@ private fun updated(value: Long) = Instant.ofEpochMilli(value).atZone(ZoneId.sys
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KiekkopolkuApp(vm: HistoryViewModel) {
-    val dark = isSystemInDarkTheme()
-    val colors = if (dark) darkColorScheme(primary = Color(0xFF93D5A9), secondaryContainer = Color(0xFF243B2D),
-        background = Color(0xFF111912), surface = Color(0xFF111912), surfaceContainer = Color(0xFF1D281F), surfaceContainerHighest = Color(0xFF2A362C))
-        else lightColorScheme(primary = Color(0xFF246B43), background = Color(0xFFF6F8F3), surface = Color(0xFFF6F8F3),
-            secondaryContainer = Color(0xFFE2EDDF), surfaceContainer = Color(0xFFEDF2EA), surfaceContainerHighest = Color(0xFFE8EEE4))
+    val colors = darkColorScheme(
+        primary = Color(0xFFE2E2E2), onPrimary = Color(0xFF202020),
+        primaryContainer = Color(0xFF393939), onPrimaryContainer = Color(0xFFF1F1F1),
+        secondary = Color(0xFFCACACA), onSecondary = Color(0xFF202020),
+        secondaryContainer = Color(0xFF363636), onSecondaryContainer = Color(0xFFF0F0F0),
+        tertiary = Color(0xFFBDBDBD), onTertiary = Color(0xFF202020),
+        background = Color(0xFF151515), onBackground = Color(0xFFF0F0F0),
+        surface = Color(0xFF151515), onSurface = Color(0xFFF0F0F0),
+        surfaceVariant = Color(0xFF333333), onSurfaceVariant = Color(0xFFBEBEBE),
+        surfaceContainer = Color(0xFF202020), surfaceContainerHigh = Color(0xFF2A2A2A),
+        surfaceContainerHighest = Color(0xFF303030), surfaceContainerLow = Color(0xFF1C1C1C),
+        surfaceContainerLowest = Color(0xFF101010), surfaceTint = Color.Transparent,
+        outline = Color(0xFF8C8C8C), outlineVariant = Color(0xFF484848),
+        inverseSurface = Color(0xFFE0E0E0), inverseOnSurface = Color(0xFF252525), inversePrimary = Color(0xFF555555),
+    )
     MaterialTheme(colorScheme = colors) {
         val state by vm.state.collectAsStateWithLifecycle()
         val busy by vm.busy.collectAsStateWithLifecycle()
@@ -263,19 +275,35 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
     var add by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Player?>(null) }
     var removeSample by remember { mutableStateOf(false) }
+    var initialId by rememberSaveable { mutableStateOf("") }
+    var initialName by rememberSaveable { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
     if (add) {
         BackHandler { add = false }
-        AddPlayerForm(onDismiss = { add = false }, onSave = { id, name -> vm.add(id, name); add = false })
+        AddPlayerForm(initialId, initialName, busy, onDismiss = { add = false }, onSave = { id, name, code -> vm.add(id, name, code) { add = false } })
         return
     }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Title(stringResource(R.string.profiles)); Muted(stringResource(R.string.version, BuildConfig.VERSION_NAME)) }
         item { Muted(stringResource(R.string.metrix_not_connected)) }
-        item { Button(onClick = { add = true }, enabled = !busy) { Icon(Icons.Default.Add, null); Text(stringResource(R.string.add_player)) } }
+        item { Button(onClick = { initialId = ""; initialName = ""; add = true }, enabled = !busy) { Icon(Icons.Default.Add, null); Text(stringResource(R.string.add_player)) } }
         items(history.players, key = { it.id }) { p -> Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { PlayerDot(p.color); Spacer(Modifier.width(8.dp)); Text(p.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)); IconButton(onClick = { deleting = p }, enabled = !busy) { Icon(Icons.Default.DeleteOutline, stringResource(R.string.delete_player, p.name)) } }
-                Muted(if (p.sample) stringResource(R.string.sample_profile) else stringResource(R.string.profile_id, p.metrixId))
+                Muted(when {
+                    p.sample -> stringResource(R.string.sample_profile)
+                    p.metrixId != null -> stringResource(R.string.profile_id, p.metrixId)
+                    else -> stringResource(R.string.no_player_id)
+                })
+                if (!p.sample) {
+                    Muted(stringResource(if (p.hasIntegrationCode) R.string.code_present else R.string.code_absent))
+                    TextButton(onClick = { initialId = p.metrixId.orEmpty(); initialName = p.name; add = true }, enabled = !busy) {
+                        Text(stringResource(R.string.connect_code))
+                    }
+                    p.metrixId?.let { id -> TextButton(onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discgolfmetrix.com/player/$id")))
+                    }) { Text(stringResource(R.string.open_profile)) } }
+                }
                 Muted(p.lastSyncAt?.let { stringResource(R.string.last_updated, updated(it)) } ?: stringResource(R.string.never_synced))
             }
         } }
@@ -291,15 +319,26 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
         confirmButton = { TextButton(onClick = { vm.removeSample(); removeSample = false }) { Text(stringResource(R.string.delete)) } },
         dismissButton = { TextButton(onClick = { removeSample = false }) { Text(stringResource(R.string.cancel)) } })
 }
-@Composable private fun AddPlayerForm(onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }; var id by rememberSaveable { mutableStateOf("") }
-    val valid = name.trim().length in 1..60 && id.matches(Regex("[0-9]{1,20}")) && id.any { it != '0' }
+@Composable private fun AddPlayerForm(initialId: String, initialName: String, busy: Boolean, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    var id by rememberSaveable { mutableStateOf(initialId) }
+    // Credentials must never enter the saved-instance-state Bundle or a preview fixture.
+    var code by remember { mutableStateOf("") }
+    val rawId = id.trim()
+    val validId = rawId.matches(Regex("[0-9]{1,20}")) && rawId.any { it != '0' }
+    val valid = name.trim().length <= 60 && (validId || (rawId.isEmpty() && code.isNotBlank())) && code.length <= 512 && code.none { it.isISOControl() }
+    val defaultName = if (rawId.isEmpty()) stringResource(R.string.default_player) else stringResource(R.string.default_player_id, rawId)
     LazyColumn(modifier = Modifier.imePadding(), contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Title(stringResource(R.string.add_player)) }
         item { Muted(stringResource(R.string.profile_hint)) }
-        item { OutlinedTextField(name, { name = it.take(60) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.display_name)) }, singleLine = true) }
-        item { OutlinedTextField(id, { id = it.take(20) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.metrix_id)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) }
-        item { Button(onClick = { onSave(id, name) }, enabled = valid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save)) } }
-        item { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+        item { OutlinedTextField(name, { name = it.take(60) }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text(stringResource(R.string.display_name)) }, supportingText = { Text(stringResource(R.string.optional_name)) }, singleLine = true) }
+        item { OutlinedTextField(id, { id = it.take(20) }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text(stringResource(R.string.metrix_id)) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) }
+        item { OutlinedTextField(code, { code = it.take(512) }, Modifier.fillMaxWidth(), enabled = !busy,
+            label = { Text(stringResource(R.string.integration_code)) }, supportingText = { Text(stringResource(R.string.code_hint)) },
+            visualTransformation = PasswordVisualTransformation(), singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)) }
+        item { Muted(stringResource(R.string.code_privacy)) }
+        item { Button(onClick = { onSave(rawId, name.trim().ifEmpty { defaultName }, code) }, enabled = valid && !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (busy) R.string.saving else R.string.save)) } }
+        item { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) } }
     }
 }

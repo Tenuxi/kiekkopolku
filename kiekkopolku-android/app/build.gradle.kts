@@ -28,6 +28,7 @@ android {
         unitTests.all { it.maxHeapSize = "1536m"; it.forkEvery = 1 }
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    sourceSets.getByName("test").resources.srcDir("schemas")
 }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
@@ -42,6 +43,8 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(libs.hilt.runtime)
     implementation(libs.coroutines)
+    implementation(libs.okhttp)
+    implementation(libs.serialization.json)
     ksp(libs.room.compiler)
     ksp(libs.hilt.compiler)
     debugImplementation(libs.compose.tooling)

@@ -25,8 +25,8 @@ class UiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private class Fake : HistoryRepository, PlayerRepository, SyncRepository {
         override val history = MutableStateFlow(History())
-        override suspend fun addPlayer(metrixId: String, name: String) {
-            history.value = history.value.copy(players = history.value.players + Player(metrixId, metrixId, name, 0, true, false, null))
+        override suspend fun addPlayer(metrixId: String, name: String, integrationCode: String) {
+            history.value = history.value.copy(players = history.value.players + Player(metrixId.ifBlank { "linked" }, metrixId.ifBlank { null }, name, 0, true, false, null, integrationCode.isNotBlank()))
         }
         override suspend fun selectPlayer(id: String, selected: Boolean) { history.value = history.value.copy(players = history.value.players.map { if (it.id == id) it.copy(active = selected) else it }) }
         override suspend fun deletePlayer(id: String) { history.value = history.value.copy(players = history.value.players.filterNot { it.id == id }) }
@@ -69,11 +69,21 @@ class UiTest {
         compose.onNodeWithText("Lisää pelaaja").performClick()
         compose.onNodeWithText("Näyttönimi").performTextInput("Testipelaaja")
         compose.onNodeWithText("DiscGolfMetrix-pelaaja-ID").performTextInput("123")
-        compose.onNodeWithText("Tallenna").performClick()
+        compose.onNodeWithText("Tallenna").performScrollTo().performClick()
         compose.onNodeWithText("Testipelaaja").assertIsDisplayed()
         compose.onNodeWithContentDescription("Takaisin").performClick()
         compose.onNodeWithText("Kierroksia ei vielä ole").assertIsDisplayed()
         compose.onNodeWithText("Testipelaaja").performClick()
         compose.onNodeWithText("Valitse vähintään yksi pelaaja yläreunasta.").assertIsDisplayed()
+    }
+    @Test fun playerCanBeAddedWithCodeAndWithoutNameOrId() {
+        start()
+        compose.onNodeWithText("Lisää pelaaja").performClick()
+        compose.onNodeWithText("Lisää pelaaja").performClick()
+        compose.onNodeWithText("Metrix-integraatiokoodi").performScrollTo().performTextInput("synthetic-ui-code")
+        compose.onNodeWithText("Tallenna").performScrollTo().performClick()
+        compose.onNodeWithText("Metrix-pelaaja").assertIsDisplayed()
+        compose.onNodeWithText("Pelaaja-ID:tä ei ole annettu").assertIsDisplayed()
+        compose.onNodeWithText("Integraatiokoodi liitetty").assertIsDisplayed()
     }
 }

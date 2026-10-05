@@ -1,6 +1,8 @@
 package fi.kiekkopolku.app.data
 
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Dao
 interface HistoryDao {
@@ -11,6 +13,7 @@ interface HistoryDao {
     @Query("SELECT * FROM hole_scores ORDER BY ordinal") suspend fun holes(): List<HoleScoreEntity>
     @Query("SELECT * FROM sync_states") suspend fun syncStates(): List<SyncStateEntity>
     @Insert suspend fun insertPlayer(player: PlayerEntity)
+    @Update suspend fun updatePlayer(player: PlayerEntity)
     @Upsert suspend fun putCourses(items: List<CourseEntity>)
     @Upsert suspend fun putRefs(items: List<CourseSourceRefEntity>)
     @Upsert suspend fun putRounds(items: List<RoundEntity>)
@@ -29,5 +32,18 @@ interface HistoryDao {
 
 @Database(entities = [PlayerEntity::class, CourseEntity::class, CourseSourceRefEntity::class,
     RoundEntity::class, RoundPlayerEntity::class, HoleScoreEntity::class,
-    CourseExternalMetadataEntity::class, SyncStateEntity::class], version = 1, exportSchema = true)
-abstract class KiekkopolkuDatabase : RoomDatabase() { abstract fun history(): HistoryDao }
+    CourseExternalMetadataEntity::class, SyncStateEntity::class], version = 2, exportSchema = true)
+abstract class KiekkopolkuDatabase : RoomDatabase() {
+    abstract fun history(): HistoryDao
+    companion object {
+        // Keep the legacy identity column and all parent/child rows intact; no table rebuild or destructive fallback.
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE players ADD COLUMN externalPlayerId TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE players ADD COLUMN hasIntegrationCode INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE players SET externalPlayerId = metrixPlayerId WHERE isSample = 0")
+                db.execSQL("CREATE UNIQUE INDEX index_players_externalPlayerId ON players (externalPlayerId)")
+            }
+        }
+    }
+}

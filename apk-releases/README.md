@@ -4,6 +4,7 @@ Jokainen julkaistu testiversio säilytetään omassa versionumerokansiossaan. Va
 
 | Versio | APK | Sisältö |
 |---|---|---|
+| 0.2.0 | [kiekkopolku-0.2.0-debug.apk](0.2.0/kiekkopolku-0.2.0-debug.apk) | Tumma harmaa teema ja ID-/integraatiokoodilisäys |
 | 0.1.0 | [kiekkopolku-0.1.0-debug.apk](0.1.0/kiekkopolku-0.1.0-debug.apk) | Paikallinen MVP ja vapaaehtoinen esimerkkiperhe |
 
 GitHubissa avaa APK-tiedosto ja valitse **Download raw file**, tai käytä projektin README:n suoraa latauslinkkiä. Puhelin saattaa pyytää sallimaan asennuksen käytetystä selaimesta. Vähimmäisversio on Android 8.0 (API 26).

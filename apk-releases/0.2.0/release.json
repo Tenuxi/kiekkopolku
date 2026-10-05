@@ -1,0 +1,11 @@
+{
+  "applicationId": "fi.kiekkopolku.app.debug",
+  "versionName": "0.2.0",
+  "versionCode": 2,
+  "artifact": "kiekkopolku-0.2.0-debug.apk",
+  "sha256": "ea1b34b07c7992e170eb280cf5f54a11fa8128626fee1fd2b1ced9c5222f823f",
+  "buildType": "debug",
+  "minSdk": 26,
+  "sourceTag": "v0.2.0",
+  "note": "Test APK. Metrix history import is not implemented."
+}
