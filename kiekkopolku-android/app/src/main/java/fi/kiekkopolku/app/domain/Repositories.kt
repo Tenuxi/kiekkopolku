@@ -20,4 +20,4 @@ class DuplicatePlayerException : IllegalArgumentException()
 class InvalidIntegrationCodeException : Exception()
 class MetrixConnectionException : Exception()
 
-data class SyncProgress(val playerName: String, val processed: Int, val total: Int)
+data class SyncProgress(val playerName: String, val processed: Int, val total: Int, val phase: String = "RESULTS")

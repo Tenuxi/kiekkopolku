@@ -3,7 +3,10 @@ package fi.kiekkopolku.app.domain
 data class Player(val id: String, val metrixId: String?, val name: String, val color: Int,
     val active: Boolean, val sample: Boolean, val lastSyncAt: Long?, val hasIntegrationCode: Boolean = false, val syncStatus: String? = null, val syncError: String? = null)
 data class Course(val id: String, val name: String, val city: String?, val country: String?,
-    val latitude: Double?, val longitude: Double?)
+    val latitude: Double?, val longitude: Double?, val physicalId: String = id) {
+    val hasLocation: Boolean get() = latitude != null && longitude != null && latitude.isFinite() && longitude.isFinite() &&
+        latitude in -85.0..85.0 && longitude in -180.0..180.0 && !(latitude == 0.0 && longitude == 0.0)
+}
 data class Hole(val ordinal: Int, val label: String, val par: Int?, val score: Int?)
 data class RoundEntry(val roundId: String, val externalId: String, val source: String,
     val playerId: String, val courseId: String?, val date: String, val layout: String?, val tee: String?,
@@ -12,7 +15,7 @@ data class RoundEntry(val roundId: String, val externalId: String, val source: S
     val played: Boolean get() = status == "FINISHED" || (status in listOf("DNF", "IN_PROGRESS") && holes.any { (it.score ?: 0) > 0 })
 }
 data class History(val players: List<Player> = emptyList(), val courses: List<Course> = emptyList(),
-    val entries: List<RoundEntry> = emptyList()) {
+    val entries: List<RoundEntry> = emptyList(), val metrixEvents: List<MetrixEvent> = emptyList()) {
     val activePlayers get() = players.filter { it.active }
     fun selectedEntries(): List<RoundEntry> {
         val ids = activePlayers.map { it.id }.toSet()
@@ -37,7 +40,7 @@ data class CourseVisit(val course: Course, val entries: List<RoundEntry>) {
     val first get() = entries.minOf { it.date }
     val last get() = entries.maxOf { it.date }
 }
-fun History.courseVisits(query: String = "", order: CourseOrder = CourseOrder.NAME): List<CourseVisit> {
+fun History.courseVisits(query: String = "", order: CourseOrder = CourseOrder.LAST_PLAYED): List<CourseVisit> {
     val grouped = selectedEntries().groupBy { it.courseId }
     val visits = courses.filter { it.id in grouped && it.name.contains(query.trim(), ignoreCase = true) }
         .map { CourseVisit(it, grouped.getValue(it.id)) }
@@ -48,4 +51,20 @@ fun History.courseVisits(query: String = "", order: CourseOrder = CourseOrder.NA
         CourseOrder.LAST_PLAYED -> compareByDescending<CourseVisit> { it.last }.then(name)
         CourseOrder.FIRST_PLAYED -> compareBy<CourseVisit> { it.first }.then(name)
     })
+}
+
+data class MetrixEvent(val playerId: String, val externalId: String, val listed: Boolean, val outcome: String)
+data class Coverage(val listedEvents: Int, val blockedCards: Int, val otherUnavailable: Int, val pending: Int)
+fun History.coverage(playerIds: Set<String> = activePlayers.map { it.id }.toSet()): Coverage {
+    val selected = metrixEvents.filter { it.playerId in playerIds }
+    return Coverage(selected.filter { it.listed }.map { it.externalId }.distinct().size,
+        selected.filter { it.outcome == "HISTORY_LIMIT" }.map { it.externalId }.distinct().size,
+        selected.filter { it.outcome in listOf("ACCESS", "RESPONSE", "UNSUPPORTED") }.map { it.externalId }.distinct().size,
+        selected.filter { it.outcome == "PENDING" }.map { it.externalId }.distinct().size)
+}
+fun History.entriesLastYear(today: java.time.LocalDate = java.time.LocalDate.now(), entries: List<RoundEntry> = selectedEntries()) =
+    entries.filter { it.date >= today.minusYears(1).toString() && it.date <= today.toString() }
+fun History.physicalCourseCount(entries: List<RoundEntry> = selectedEntries()): Int {
+    val ids = entries.mapNotNull { it.courseId }.toSet()
+    return courses.filter { it.id in ids }.map { it.physicalId }.distinct().size
 }

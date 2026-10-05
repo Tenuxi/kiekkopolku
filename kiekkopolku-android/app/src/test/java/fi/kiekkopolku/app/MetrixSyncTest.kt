@@ -33,7 +33,8 @@ class MetrixSyncTest {
             override suspend fun remove(playerId: String) { secrets.remove(playerId) }
         }, verifier = IntegrationCodeVerifier { }, metrix = MetrixApi { content, _, id ->
             calls += "$content:$id"
-            response(content, id)
+            if (content == "course") json("""{"course":{"ID":"$id","ParentID":"800000","Fullname":"Testirata","Lat":"61.5","Lng":"23.7"},"Errors":[]}""")
+            else response(content, id)
         }, requestDelayMillis = 0)
     }
     @After fun close() { db.close() }
@@ -180,6 +181,45 @@ class MetrixSyncTest {
             try { parseMetrixResult(json(body), "101", player, 0); fail("Must reject ambiguous card") }
             catch (_: MetrixImportException) { }
         }
+    }
+    @Test fun fullEventListIsRetainedWithoutInventing800PlayedRounds() = runBlocking {
+        add()
+        response = { content, _ -> if (content == "my_competitions") buildJsonObject {
+            put("my_competitions", buildJsonArray { (1000..1799).forEach { add(it) } })
+        } else json("""{"Competition":null,"Errors":["data older than year"]}""") }
+        repo.refreshSelected()
+        val h = repo.snapshot()
+        assertEquals(800, h.coverage().listedEvents)
+        assertEquals(800, h.coverage().blockedCards)
+        assertEquals(0, h.stats().rounds)
+        assertTrue(h.courses.isEmpty())
+        calls.clear()
+        repo.refreshOnOpen()
+        assertEquals(0, calls.count { it.startsWith("result:") })
+        assertEquals(800, repo.snapshot().metrixEvents.size)
+        repo.deletePlayer(h.players.single().id)
+        assertTrue(repo.snapshot().metrixEvents.isEmpty())
+    }
+    @Test fun coordinatesParentLinkAndHistorySurviveLaterDeniedScorecard() = runBlocking {
+        add(); repo.refreshSelected()
+        val h = repo.snapshot()
+        assertEquals(61.5, h.courses.single().latitude!!, 0.0001)
+        assertEquals("metrix:course:800000", h.courses.single().physicalId)
+        // A v0.3 installation may have an old round but no metadata yet.
+        db.history().putCourses(db.history().courses().map { it.copy(latitude = null, longitude = null) })
+        response = { content, _ -> if (content == "my_competitions") json("""{"my_competitions":[101]}""")
+            else json("""{"Competition":null,"Errors":["data older than year"]}""") }
+        repo.refreshSelected()
+        assertEquals(1, repo.snapshot().stats().rounds)
+        assertTrue(repo.snapshot().courses.single().hasLocation)
+        assertEquals(1, repo.snapshot().coverage().blockedCards)
+        assertEquals(2, calls.count { it == "course:800001" })
+    }
+    @Test fun laterScorecardDoesNotEraseCourseMetadata() = runBlocking {
+        add(); repo.refreshSelected(); repo.refreshSelected()
+        assertTrue(repo.snapshot().courses.single().hasLocation)
+        assertEquals("metrix:course:800000", repo.snapshot().courses.single().physicalId)
+        assertEquals(1, repo.snapshot().coverage().listedEvents)
     }
     private fun json(value: String) = Json.parseToJsonElement(value).jsonObject
     private fun round(id: String, firstScore: String = "1") = json("""{

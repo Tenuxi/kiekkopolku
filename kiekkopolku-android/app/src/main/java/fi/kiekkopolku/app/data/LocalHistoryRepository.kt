@@ -26,22 +26,24 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
     private val writes = Mutex()
     override val progress = MutableStateFlow<SyncProgress?>(null)
     override val history: Flow<History> = db.invalidationTracker.createFlow(
-        "players", "courses", "rounds", "round_players", "hole_scores", "sync_states"
+        "players", "courses", "rounds", "round_players", "hole_scores", "sync_states", "metrix_events", "course_refs", "course_metadata"
     ).map { snapshot() }
 
     suspend fun snapshot(): History = db.withTransaction {
         val sync = dao.syncStates().associateBy { it.playerId }
+        val courseRefs = dao.courseRefs().associateBy { it.courseId }
         val rounds = dao.rounds().associateBy { it.id }
         val holes = dao.holes().groupBy { it.roundId to it.playerId }
         History(dao.players().map {
             Player(it.id, it.externalPlayerId, it.displayName, it.colorKey, it.isActive, it.isSample, sync[it.id]?.lastSyncAt, it.hasIntegrationCode, sync[it.id]?.status, sync[it.id]?.errorCode)
-        }, dao.courses().map { Course(it.id, it.name, it.city, it.countryCode, it.latitude, it.longitude) },
+        }, dao.courses().map { Course(it.id, it.name, it.city, it.countryCode, it.latitude, it.longitude,
+            courseRefs[it.id]?.parentExternalId?.let { parent -> "metrix:course:$parent" } ?: it.id) },
             dao.entries().map { e ->
                 val r = rounds.getValue(e.roundId)
                 RoundEntry(r.id, r.externalRoundId, r.source, e.playerId, e.courseId, r.playedDate,
                     e.layoutName, e.tee, e.totalScore, e.relativeToPar, e.status, e.scoringMode == "INDIVIDUAL",
                     e.holeDataComplete, holes[e.roundId to e.playerId].orEmpty().map { Hole(it.ordinal, it.label, it.par, it.score) })
-            })
+            }, dao.metrixEvents().map { MetrixEvent(it.playerId, it.externalId, it.listed, it.outcome) })
     }
 
     override suspend fun addPlayer(metrixId: String, name: String, integrationCode: String, profileId: String?) = writes.withLock {
@@ -134,7 +136,15 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                 if (reason == null) {
                     progress.value = SyncProgress(player.displayName, 0, 0)
                     try {
-                        val ids = competitionIds(metrix.get("my_competitions", code!!))
+                        // Refresh stored course locations even when old scorecards are no longer available.
+                        val checkedCourses = mutableSetOf<String>()
+                        var courseFailure = enrichCourses(player.id, code!!, automatic, checkedCourses)
+                        val ids = competitionIds(metrix.get("my_competitions", code))
+                        db.withTransaction {
+                            dao.addEvents(ids.map { MetrixEventEntity(player.id, it, true) })
+                            ids.chunked(500).forEach { dao.markListed(player.id, it) }
+                        }
+                        val knownEvents = dao.metrixEvents().filter { it.playerId == player.id }.associateBy { it.externalId }
                         val pending = ArrayDeque(ids)
                         val seen = mutableSetOf<String>()
                         val embedded = mutableMapOf<String, kotlinx.serialization.json.JsonObject>()
@@ -144,6 +154,14 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                         while (pending.isNotEmpty()) {
                             val id = pending.removeFirst()
                             if (!seen.add(id)) continue
+                            dao.addEvents(listOf(MetrixEventEntity(player.id, id, id in ids)))
+                            val event = knownEvents[id]
+                            if (automatic && event?.outcome == "HISTORY_LIMIT" && event.checkedAt != null &&
+                                attempted - event.checkedAt in 0 until 86_400_000L) {
+                                reason = "HISTORY_LIMIT"
+                                processed++
+                                continue
+                            }
                             progress.value = SyncProgress(player.displayName, processed, seen.size + pending.count { it !in seen })
                             val cached = knownRounds[id]?.takeIf { it.source == "metrix" }
                             val entry = cached?.let { knownEntries[it.id] }
@@ -152,6 +170,7 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                             if (automatic && old && entry?.holeDataComplete == true && entry.status == "FINISHED" &&
                                 attempted - cached!!.fetchedAt in 0 until 86_400_000L) {
                                 matched = true
+                                dao.eventOutcome(player.id, id, "IMPORTED", now())
                                 processed++
                                 continue
                             }
@@ -159,17 +178,27 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                             try {
                                 val mapped = parseMetrixResult(embedded.remove(id) ?: metrix.get("result", code, id), id, player, now())
                                 embedded.putAll(mapped.embedded.filterKeys { it !in seen })
+                                db.withTransaction {
+                                    if (mapped.batch.entries.isNotEmpty()) persist(mapped.batch)
+                                    dao.eventOutcome(player.id, id, when {
+                                        mapped.children.isNotEmpty() -> "PARENT"
+                                        mapped.batch.entries.isNotEmpty() -> "IMPORTED"
+                                        else -> "NO_RESULT"
+                                    }, now())
+                                }
                                 pending.addAll(mapped.children.filter { it !in seen && it !in pending })
                                 if (mapped.batch.entries.isNotEmpty()) {
-                                    db.withTransaction { persist(mapped.batch) }
                                     imported += mapped.batch.entries.size
                                     matched = true
                                 }
                             } catch (e: MetrixImportException) {
+                                dao.eventOutcome(player.id, id, e.reason, now())
                                 reason = e.reason // Continue other rounds after a per-result permission/format failure.
                             }
                             processed++
                         }
+                        courseFailure = enrichCourses(player.id, code, automatic, checkedCourses) || courseFailure
+                        if (courseFailure && reason == null) reason = "COURSE"
                         if (ids.isNotEmpty() && !matched && reason == null) reason = "NO_RESULTS"
                     } catch (e: CancellationException) { throw e }
                     catch (_: InvalidIntegrationCodeException) { reason = "INVALID_CODE" }
@@ -190,6 +219,39 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
             }
         } finally { progress.value = null }
     }
+    private suspend fun enrichCourses(playerId: String, code: String, automatic: Boolean, checked: MutableSet<String>): Boolean {
+        val used = dao.entries().filter { it.playerId == playerId }.mapNotNull { it.courseId }.toSet()
+        val refs = dao.courseRefs().filter { it.source == "metrix" && it.courseId in used }.associateBy { it.courseId }
+        val metadata = dao.courseMetadata().associateBy { it.courseId }
+        var failed = false
+        for (course in dao.courses().filter { it.id in refs }) {
+            if (!checked.add(course.id)) continue
+            val cached = metadata[course.id]
+            if (automatic && cached != null && now() - cached.fetchedAt in 0 until 604_800_000L) continue
+            val ref = refs.getValue(course.id)
+            progress.value = SyncProgress(course.name, 0, 0, phase = "COURSES")
+            try {
+                delay(requestDelayMillis)
+                var update = parseMetrixCourse(metrix.get("course", code, ref.externalId), course, ref.externalId, now())
+                // Layouts may inherit their parent's location. Parent coordinates are never guessed from names.
+                val parentId = update.ref.parentExternalId
+                if (update.course.latitude == null && parentId != null) {
+                    delay(requestDelayMillis)
+                    val parent = parseMetrixCourse(metrix.get("course", code, parentId),
+                        course.copy(id = "metrix:course:$parentId"), parentId, now()).course
+                    update = update.copy(course = update.course.copy(latitude = parent.latitude, longitude = parent.longitude),
+                        metadata = update.metadata.copy(latitude = parent.latitude, longitude = parent.longitude))
+                }
+                db.withTransaction {
+                    dao.putCourses(listOf(update.course)); dao.putRefs(listOf(update.ref)); dao.putMetadata(update.metadata)
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: MetrixImportException) { failed = true }
+            catch (_: MetrixConnectionException) { return true }
+            catch (_: InvalidIntegrationCodeException) { return true }
+        }
+        return failed
+    }
     private suspend fun persist(batch: ImportBatch) {
         // Do not downgrade a complete cached scorecard to a partial provider response.
         val existing = dao.entries().associateBy { it.roundId to it.playerId }
@@ -197,7 +259,13 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
             .map { it.roundId to it.playerId }.toSet()
         val entries = batch.entries.filter { it.roundId to it.playerId !in protected }
         val holes = batch.holes.filter { it.roundId to it.playerId !in protected }
-        dao.putCourses(batch.courses); dao.putRefs(batch.refs)
+        val courses = dao.courses().associateBy { it.id }
+        val refs = dao.courseRefs().associateBy { it.source to it.externalId }
+        dao.putCourses(batch.courses.map { incoming -> courses[incoming.id]?.let { old ->
+            incoming.copy(name = old.name, city = old.city, countryCode = old.countryCode,
+                latitude = old.latitude, longitude = old.longitude)
+        } ?: incoming })
+        dao.putRefs(batch.refs.map { refs[it.source to it.externalId] ?: it })
         dao.putRounds(batch.rounds.filter { r -> batch.entries.any { it.roundId == r.id && it.roundId to it.playerId !in protected } })
         dao.putEntries(entries)
         entries.filter { it.holeDataComplete }.forEach { dao.deleteHoles(it.roundId, it.playerId) }

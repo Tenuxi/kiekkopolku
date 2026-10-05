@@ -4,6 +4,7 @@ Jokainen julkaistu testiversio säilytetään omassa versionumerokansiossaan. Va
 
 | Versio | APK | Sisältö |
 |---|---|---|
+| 0.4.0 | [kiekkopolku-0.4.0-debug.apk](0.4.0/kiekkopolku-0.4.0-debug.apk) | Kartta, ratakoordinaatit, koko historia ja viimeisen vuoden tilastot |
 | 0.3.0 | [kiekkopolku-0.3.0-debug.apk](0.3.0/kiekkopolku-0.3.0-debug.apk) | Metrix-historian tuonti, automaattipäivitys ja latausilmaisin |
 | 0.2.0 | [kiekkopolku-0.2.0-debug.apk](0.2.0/kiekkopolku-0.2.0-debug.apk) | Tumma harmaa teema ja ID-/integraatiokoodilisäys |
 | 0.1.0 | [kiekkopolku-0.1.0-debug.apk](0.1.0/kiekkopolku-0.1.0-debug.apk) | Paikallinen MVP ja vapaaehtoinen esimerkkiperhe |

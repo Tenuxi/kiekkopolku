@@ -1,4 +1,4 @@
-# Kiekkopolku Android — 0.3.0
+# Kiekkopolku Android — 0.4.0
 
 Itsenäisesti Android Studiossa avattava Android-projekti. ApplicationId: `fi.kiekkopolku.app` (testiversio: `fi.kiekkopolku.app.debug`). Kotlin, Compose, Material 3, Room, Flow ja Hilt. MinSdk 26, compile/targetSdk 35. Integraatiokoodin tarkistus käyttää Metrixin dokumentoitua API:a. Koodi tallennetaan salattuna Android Keystoren avulla. Oikean kierroshistorian tuonti käyttää `my_competitions`- ja `result`-kutsuja.
 
@@ -25,7 +25,7 @@ Sovelluksen avautuminen käynnistää tallennettujen oikeiden pelaajien taustap�
 
 Paikallisen MVP:n kolme repository-rajapintaa toteuttaa yksi luokka; verkkosopimus on erillisessä MetrixApi-rajapinnassa ja tulosten muunnos MetrixImport-tiedostossa. UI näkee vain domain-mallit. Metrix- ja metadatalähteiden rajapinnat on erotettu; Metrix-tuonti perustuu dokumentaatioon sekä julkisista oikeista tuloksista tarkistettuihin rakenteisiin. OkHttp hoitaa HTTPS-pyynnöt ja Kotlin Serialization JSON-jäsennyksen. Vain tallennetun pelaaja-ID:n tulokset kirjoitetaan Roomiin. Integraatiokoodin omistaja-ID:tä ei arvata eikä selainprofiilia kaavita.
 
-Navigaatio on pieni `rememberSaveable`-pohjainen tila ja Androidin takaisin-toiminto, ei erillistä navigaatiokehystä. Kartta/clustering kuuluu vaiheeseen 4. Hyväksymätöntä logoluonnosta ei ole muutettu lopulliseksi launcher-resurssiksi; tässä testiversiossa käytetään Androidin oletuskuvaketta.
+Navigaatio on pieni `rememberSaveable`-pohjainen tila ja Androidin takaisin-toiminto, ei erillistä navigaatiokehystä. Kartta käyttää MapLibre Native 11.13.5:tä ja OpenFreeMapin tummaa tyyliä. Lähekkäiset ratamerkit ryhmitellään ja merkin kautta voi avata radan historian. Kartta ei tarvitse API-avainta tai laitteen sijaintilupaa. Hyväksymätöntä logoluonnosta ei ole muutettu lopulliseksi launcher-resurssiksi; tässä testiversiossa käytetään Androidin oletuskuvaketta.
 
 ## Versiointi
 
@@ -33,4 +33,14 @@ Version ainoa lähde on `version.properties`. Repositoryn juuressa `git config c
 
 Version 0.3.0 tarkat integraatiorajat ja tallennusratkaisu: [julkaisumuistio](../docs/RELEASE-0.3.0.md). Room 1 → 2 -migraatio säilyttää version 0.1.0 historian.
 
-Automaattipäivitys käyttää alle vuorokauden vanhaa paikallista kopiota yli 30 päivää vanhoista valmiista kierroksista. Uudet, tuoreet ja keskeneräiset haetaan uudelleen. Manuaalinen päivitys ohittaa tämän välimuistin. Palvelun kieltämä historia tai tuntematon vastaus näytetään osittaisena tuontina. Tunnettu paripelityyppi ohitetaan; joukkueen tulosta ei kirjata henkilökohtaiseksi aceksi. Rataluvussa layoutit voivat olla erillisiä: fyysisten ratojen yhdistäminen tulee myöhemmin.
+Automaattipäivitys käyttää alle vuorokauden vanhaa paikallista kopiota yli 30 päivää vanhoista valmiista kierroksista. Uudet, tuoreet ja keskeneräiset haetaan uudelleen. Manuaalinen päivitys ohittaa tämän välimuistin. Palvelun kieltämä historia tai tuntematon vastaus näytetään osittaisena tuontina. Tunnettu paripelityyppi ohitetaan; joukkueen tulosta ei kirjata henkilökohtaiseksi aceksi. Rataluvussa Metrixin ParentID yhdistää tunnetut layoutit fyysiseksi ratakohteeksi. Ilman parent-tietoa layout säilyy omana kohteenaan. Ratalistan oletusjärjestys on viimeksi pelattu.
+
+## Versio 0.4.0
+
+Room 2 → 3 lisää Metrix-tapahtumien pysyvän indeksin säilyttäen kierrokset ja profiilit. Tapahtumatunnisteiden määrä erotetaan varmennetuista kierroksista: kaikki ID:t eivät ole pelattuja kierroksia. Koko tallennettu historia ja viimeisten 12 kuukauden tulokset näytetään erikseen. Rajoitettuja vanhoja tuloshakuja ei tehdä automaattisesti uudelleen vuorokauden sisällä; manuaalinen päivitys yrittää aina uudelleen.
+
+Ratojen `course`-kutsusta tuodaan Lat/Lng, kaupunki, maa ja ParentID. Tallennetut ratatiedot päivitetään myös silloin, kun vanha tuloskortti on estetty. Koordinaatit säilyvät myöhemmissä tuloshaussa. Metatiedon automaattinen välimuisti on seitsemän päivää; manuaalinen päivitys ohittaa sen. Puuttuvia sijainteja ei arvata.
+
+Karttapohja vaatii verkkoyhteyden tai SDK:n aiemman välimuistin; koko Suomen offline-karttaa ei luvata. Tiedossa olevat radat, koordinaatit ja historia säilyvät laitteessa. Karttapalvelu saa karttaruutupyynnöt; pelaajien nimiä, tuloksia ja Metrix-koodeja ei lähetetä sille. Tekijät: OpenFreeMap, OpenMapTiles ja OpenStreetMap.
+
+[Version 0.4.0 julkaisumuistio](../docs/RELEASE-0.4.0.md).

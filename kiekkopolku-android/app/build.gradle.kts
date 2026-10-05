@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(libs.hilt.runtime)
     implementation(libs.coroutines)
+    implementation(libs.maplibre)
     implementation(libs.okhttp)
     implementation(libs.serialization.json)
     ksp(libs.room.compiler)

@@ -50,7 +50,7 @@ private fun updated(value: Long) = Instant.ofEpochMilli(value).atZone(ZoneId.sys
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KiekkopolkuApp(vm: HistoryViewModel) {
+fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (String) -> Unit) -> Unit = { h, open -> CourseMap(h, open) }) {
     val colors = darkColorScheme(
         primary = Color(0xFFE2E2E2), onPrimary = Color(0xFF202020),
         primaryContainer = Color(0xFF393939), onPrimaryContainer = Color(0xFFF1F1F1),
@@ -89,8 +89,8 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
         val snackbar = remember { SnackbarHostState() }
         val context = androidx.compose.ui.platform.LocalContext.current
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(context.getString(it)); vm.message.value = null } }
-        val labels = listOf(R.string.courses, R.string.rounds, R.string.aces, R.string.stats)
-        val icons = listOf(Icons.Default.Place, Icons.AutoMirrored.Filled.List, Icons.Default.StarOutline, Icons.Default.BarChart)
+        val labels = listOf(R.string.courses, R.string.rounds, R.string.aces, R.string.stats, R.string.map)
+        val icons = listOf(Icons.Default.Place, Icons.AutoMirrored.Filled.List, Icons.Default.StarOutline, Icons.Default.BarChart, Icons.Default.Map)
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = { TopAppBar(title = { Text(stringResource(if (profiles) R.string.profiles else R.string.app_name)) },
@@ -110,7 +110,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
             } } },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                progress?.let { Text(stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
+                progress?.let { Text(if (it.phase == "COURSES") stringResource(R.string.sync_courses, it.playerName) else stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
                     style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
                 Text(stringResource(R.string.local_mode), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
@@ -130,6 +130,8 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
                     history.activePlayers.isEmpty() -> Notice(R.string.select_players)
                     roundId != null -> RoundDetail(history, entries.find { it.roundId == roundId && it.playerId == roundPlayerId })
                     courseId != null -> CourseDetail(history, courseId!!) { roundId = it.roundId; roundPlayerId = it.playerId }
+                    tab == 4 -> mapScreen(history) { courseId = it }
+                    tab == 3 -> Statistics(history)
                     entries.isEmpty() -> Notice(R.string.no_rounds, R.string.no_rounds_body, action = { profiles = true }, actionLabel = R.string.profiles)
                     tab == 0 -> Courses(history) { courseId = it }
                     tab == 1 -> RoundList(history, entries) { roundId = it.roundId; roundPlayerId = it.playerId }
@@ -162,7 +164,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
 }
 @Composable private fun Courses(history: History, open: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
-    var orderIndex by rememberSaveable { mutableIntStateOf(0) }
+    var orderIndex by rememberSaveable { mutableIntStateOf(CourseOrder.LAST_PLAYED.ordinal) }
     var expanded by remember { mutableStateOf(false) }
     val orderNames = listOf(R.string.order_name, R.string.order_rounds, R.string.order_last, R.string.order_first)
     val visits = history.courseVisits(query, CourseOrder.entries[orderIndex])
@@ -272,17 +274,41 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
     }
 }
 @Composable private fun Statistics(history: History) {
+    val entries = history.selectedEntries()
+    val coverage = history.coverage()
+    val lastYear = history.entriesLastYear()
+    val today = LocalDate.now()
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Title(stringResource(R.string.stats)) }
-        item { StatsCard(stringResource(R.string.all_selected), history.stats()) }
-        item { Muted(stringResource(R.string.round_count_help)); Spacer(Modifier.height(8.dp)); Muted(stringResource(R.string.coverage_help)) }
-        history.activePlayers.forEach { p -> item(key = p.id) { StatsCard(p.name, history.stats(history.selectedEntries().filter { it.playerId == p.id })) } }
+        item { StatsCard(stringResource(R.string.all_history), history.stats(), history.physicalCourseCount()) }
+        item { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.metrix_coverage), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.metrix_list_count, coverage.listedEvents))
+            Text(stringResource(R.string.metrix_blocked_count, coverage.blockedCards))
+            if (coverage.otherUnavailable > 0) Text(stringResource(R.string.metrix_other_count, coverage.otherUnavailable))
+            if (coverage.pending > 0) Text(stringResource(R.string.metrix_pending_count, coverage.pending))
+            Muted(stringResource(R.string.event_list_help))
+            if (coverage.blockedCards > 0 || history.activePlayers.any { it.syncError == "HISTORY_LIMIT" })
+                Muted(stringResource(R.string.stats_history_limit))
+        } } }
+        item { StatsCard(stringResource(R.string.last_year), history.stats(lastYear), history.physicalCourseCount(lastYear))
+            Muted(stringResource(R.string.stats_date_range, date(today.minusYears(1).toString()), date(today.toString()))) }
+        item { Muted(stringResource(R.string.round_count_help)); Spacer(Modifier.height(8.dp)); Muted(stringResource(R.string.coverage_help))
+            Muted(stringResource(R.string.physical_course_help)) }
+        history.activePlayers.forEach { p ->
+            val own = entries.filter { it.playerId == p.id }
+            val ownCoverage = history.coverage(setOf(p.id))
+            item(key = p.id) { StatsCard(p.name, history.stats(own), history.physicalCourseCount(own))
+                Muted(stringResource(R.string.metrix_list_count, ownCoverage.listedEvents)) }
+        }
     }
 }
-@Composable private fun StatsCard(title: String, stats: HistoryStats) {
+@Composable private fun StatsCard(title: String, stats: HistoryStats, physicalCourses: Int) {
     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, style = MaterialTheme.typography.titleLarge)
-        Text(stringResource(R.string.course_count, stats.courses)); Text(stringResource(R.string.round_count, stats.rounds))
+        Text(stringResource(R.string.known_round_count, stats.rounds))
+        Text(stringResource(R.string.physical_course_count, physicalCourses))
+        Text(stringResource(R.string.layout_count, stats.courses))
         Text(stringResource(R.string.ace_count, stats.aces)); Muted(stringResource(R.string.event_count, stats.events))
         stats.first?.let { Muted(stringResource(R.string.first_played, date(it))) }; stats.last?.let { Muted(stringResource(R.string.last_played, date(it))) }
         if (stats.missingHoles > 0) Muted(pluralStringResource(R.plurals.missing_holes, stats.missingHoles, stats.missingHoles))
@@ -366,6 +392,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel) {
 }
 
 private fun syncErrorText(code: String): Int = when (code) {
+    "COURSE" -> R.string.sync_course_failed
     "NEEDS_ID" -> R.string.sync_needs_id
     "NEEDS_CODE" -> R.string.sync_needs_code
     "INVALID_CODE" -> R.string.invalid_code

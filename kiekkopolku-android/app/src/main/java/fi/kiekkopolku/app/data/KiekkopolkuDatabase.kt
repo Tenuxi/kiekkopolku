@@ -7,6 +7,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Dao
 interface HistoryDao {
     @Query("SELECT * FROM players ORDER BY isSample DESC, displayName, id") suspend fun players(): List<PlayerEntity>
+    @Query("SELECT * FROM metrix_events") suspend fun metrixEvents(): List<MetrixEventEntity>
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun addEvents(items: List<MetrixEventEntity>)
+    @Query("UPDATE metrix_events SET listed = 1 WHERE playerId = :playerId AND externalId IN (:ids)")
+    suspend fun markListed(playerId: String, ids: List<String>)
+    @Query("UPDATE metrix_events SET outcome = :outcome, checkedAt = :checkedAt WHERE playerId = :playerId AND externalId = :externalId")
+    suspend fun eventOutcome(playerId: String, externalId: String, outcome: String, checkedAt: Long)
+    @Query("SELECT * FROM course_refs") suspend fun courseRefs(): List<CourseSourceRefEntity>
+    @Query("SELECT * FROM course_metadata") suspend fun courseMetadata(): List<CourseExternalMetadataEntity>
+    @Upsert suspend fun putMetadata(item: CourseExternalMetadataEntity)
     @Query("SELECT * FROM courses") suspend fun courses(): List<CourseEntity>
     @Query("SELECT * FROM rounds") suspend fun rounds(): List<RoundEntity>
     @Query("SELECT * FROM round_players") suspend fun entries(): List<RoundPlayerEntity>
@@ -32,10 +41,17 @@ interface HistoryDao {
 
 @Database(entities = [PlayerEntity::class, CourseEntity::class, CourseSourceRefEntity::class,
     RoundEntity::class, RoundPlayerEntity::class, HoleScoreEntity::class,
-    CourseExternalMetadataEntity::class, SyncStateEntity::class], version = 2, exportSchema = true)
+    CourseExternalMetadataEntity::class, SyncStateEntity::class, MetrixEventEntity::class], version = 3, exportSchema = true)
 abstract class KiekkopolkuDatabase : RoomDatabase() {
     abstract fun history(): HistoryDao
     companion object {
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS metrix_events (playerId TEXT NOT NULL, externalId TEXT NOT NULL, listed INTEGER NOT NULL, outcome TEXT NOT NULL, checkedAt INTEGER, PRIMARY KEY(playerId, externalId), FOREIGN KEY(playerId) REFERENCES players(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO metrix_events (playerId, externalId, listed, outcome, checkedAt) SELECT rp.playerId, r.externalRoundId, 0, 'IMPORTED', r.fetchedAt FROM round_players rp JOIN rounds r ON r.id = rp.roundId WHERE r.source = 'metrix'")
+            }
+        }
+
         // Keep the legacy identity column and all parent/child rows intact; no table rebuild or destructive fallback.
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {

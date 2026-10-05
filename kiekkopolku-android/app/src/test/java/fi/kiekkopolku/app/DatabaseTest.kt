@@ -91,13 +91,45 @@ class DatabaseTest {
             old.execSQL("INSERT INTO hole_scores VALUES ('r','p',0,'1',3,1)")
             old.version = 1
         }
-        val migrated = Room.databaseBuilder(context, KiekkopolkuDatabase::class.java, name).addMigrations(KiekkopolkuDatabase.MIGRATION_1_2).build()
+        val migrated = Room.databaseBuilder(context, KiekkopolkuDatabase::class.java, name).addMigrations(KiekkopolkuDatabase.MIGRATION_1_2, KiekkopolkuDatabase.MIGRATION_2_3).build()
         try {
             val h = LocalHistoryRepository(migrated).snapshot()
             assertEquals("424242", h.players.single().metrixId)
             assertFalse(h.players.single().hasIntegrationCode)
             assertEquals(1, h.stats().aces)
             assertEquals(1, h.stats().rounds)
+        } finally { migrated.close(); context.deleteDatabase(name) }
+    }
+    @Test fun migrationV2PreservesHistoryAndSeedsEventIndexWithoutInventingListMembership() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "migration-v2-test.db"
+        context.deleteDatabase(name)
+        val schema = javaClass.classLoader!!.getResourceAsStream("fi.kiekkopolku.app.data.KiekkopolkuDatabase/2.json")!!.bufferedReader().use { it.readText() }
+        val entities = org.json.JSONObject(schema).getJSONObject("database").getJSONArray("entities")
+        context.openOrCreateDatabase(name, 0, null).use { old ->
+            for (i in 0 until entities.length()) {
+                val entity = entities.getJSONObject(i)
+                val table = entity.getString("tableName")
+                old.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", table))
+                val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
+                for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql").replace("\${TABLE_NAME}", table))
+            }
+            old.execSQL("INSERT INTO players VALUES ('p','424242','Oma',0,'person',NULL,1,0,'424242',1)")
+            old.execSQL("INSERT INTO courses VALUES ('c','Rata',NULL,NULL,61.5,23.7,0)")
+            old.execSQL("INSERT INTO rounds VALUES ('r','metrix','101','2020-01-01',NULL,NULL,NULL,42)")
+            old.execSQL("INSERT INTO round_players VALUES ('r','p','c',NULL,NULL,NULL,1,-2,'FINISHED','INDIVIDUAL',1)")
+            old.execSQL("INSERT INTO hole_scores VALUES ('r','p',0,'1',3,1)")
+            old.version = 2
+        }
+        val migrated = Room.databaseBuilder(context, KiekkopolkuDatabase::class.java, name).addMigrations(KiekkopolkuDatabase.MIGRATION_2_3).build()
+        try {
+            val h = LocalHistoryRepository(migrated).snapshot()
+            assertTrue(h.players.single().hasIntegrationCode)
+            assertEquals(1, h.stats().rounds)
+            assertEquals(1, h.stats().aces)
+            assertTrue(h.courses.single().hasLocation)
+            assertEquals("IMPORTED", h.metrixEvents.single().outcome)
+            assertFalse(h.metrixEvents.single().listed)
         } finally { migrated.close(); context.deleteDatabase(name) }
     }
     @Test fun repeatedImportsDoNotDuplicateEventsPlayersOrAces() = runBlocking {

@@ -16,7 +16,7 @@ import javax.inject.Singleton
 object AppModule {
     @Provides @Singleton fun database(@ApplicationContext context: Context): KiekkopolkuDatabase =
         Room.databaseBuilder(context, KiekkopolkuDatabase::class.java, "kiekkopolku.db")
-            .addMigrations(KiekkopolkuDatabase.MIGRATION_1_2).build()
+            .addMigrations(KiekkopolkuDatabase.MIGRATION_1_2, KiekkopolkuDatabase.MIGRATION_2_3).build()
     @Provides @Singleton fun credentials(@ApplicationContext context: Context): CredentialStore = EncryptedCredentialStore(context)
     @Provides @Singleton fun metrix(): MetrixApi = MetrixHttpApi()
     @Provides @Singleton fun verifier(api: MetrixApi): IntegrationCodeVerifier = MetrixCodeVerifier(api)

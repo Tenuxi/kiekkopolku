@@ -10,6 +10,9 @@ import java.io.File
 import fi.kiekkopolku.app.domain.*
 import fi.kiekkopolku.app.ui.HistoryViewModel
 import fi.kiekkopolku.app.ui.KiekkopolkuApp
+import fi.kiekkopolku.app.ui.CourseMap
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -96,6 +99,40 @@ class UiTest {
         compose.onNodeWithText("Koordinaatteja ei ole tallennettu.").assertIsDisplayed()
         compose.onAllNodesWithText("Metsäpolku").onLast().performScrollTo().performClick()
         compose.onNodeWithText("1 · ACE").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun mapTabUsesSelectedCoursesAndOpensHistoryFromMarkerAndMissingList() {
+        val fake = Fake()
+        runBlocking { fake.loadSample() }
+        val original = fake.history.value
+        fake.history.value = original.copy(courses = original.courses.map { it.copy(latitude = 61.5, longitude = 23.7) } +
+            Course("missing", "Sijainniton rata", null, null, null, null),
+            entries = original.entries + original.entries.first().copy(roundId = "r2", courseId = "missing", date = "2020-01-01"))
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { KiekkopolkuApp(vm, mapScreen = { h, open -> CourseMap(h, open, mapContent = { located, select ->
+            Button(onClick = { select(listOf(located.first().course.id)) }) { Text("Testimerkki") }
+        }) }) }
+        compose.onNodeWithText("Viimeksi pelattu").assertIsDisplayed()
+        compose.onNodeWithText("Kartta").performClick()
+        compose.onNodeWithText("Kartalla layouteja: 1").assertIsDisplayed()
+        compose.onNodeWithText("Testimerkki").performClick()
+        compose.onNodeWithText("Metsäpolku").performClick()
+        compose.onNodeWithText("Koordinaatit: 61,50000, 23,70000").assertExists()
+        compose.onNodeWithContentDescription("Takaisin").performClick()
+        compose.onNodeWithText("Sijainti puuttuu: 1").performClick()
+        compose.onNodeWithText("Sijainniton rata").performClick()
+        compose.onNodeWithText("Koordinaatteja ei ole tallennettu.").assertIsDisplayed()
+    }
+    @Test fun statisticsShowEventCoverageEvenWhenAllScorecardsAreBlocked() {
+        val fake = Fake()
+        fake.history.value = History(players = listOf(Player("p", "123", "Oma", 0, true, false, null)),
+            metrixEvents = listOf(MetrixEvent("p", "100", true, "HISTORY_LIMIT")))
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { KiekkopolkuApp(vm) }
+        compose.onNodeWithText("Tilastot").performClick()
+        compose.onNodeWithText("Koko tallennettu historia").assertIsDisplayed()
+        compose.onNodeWithText("Metrix-listan tapahtumatunnisteita: 1").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Vanhan historian rajoittamia tuloshakuja: 1").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Viimeiset 12 kuukautta").performScrollTo().assertIsDisplayed()
     }
     @Test fun profileCreationAndSelectionEmptyState() {
         start()

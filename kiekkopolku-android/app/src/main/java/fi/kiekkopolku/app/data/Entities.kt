@@ -62,3 +62,9 @@ data class CourseExternalMetadataEntity(val source: String, val externalId: Stri
     foreignKeys = [ForeignKey(entity = PlayerEntity::class, parentColumns = ["id"], childColumns = ["playerId"], onDelete = ForeignKey.CASCADE)])
 data class SyncStateEntity(val playerId: String, val source: String, val lastAttemptAt: Long?,
     val lastSyncAt: Long?, val status: String, val historyCoverage: String, val errorCode: String? = null)
+
+/** History-list identifiers remain useful even when the provider withholds a scorecard. */
+@Entity(tableName = "metrix_events", primaryKeys = ["playerId", "externalId"],
+    foreignKeys = [ForeignKey(entity = PlayerEntity::class, parentColumns = ["id"], childColumns = ["playerId"], onDelete = ForeignKey.CASCADE)])
+data class MetrixEventEntity(val playerId: String, val externalId: String, val listed: Boolean,
+    val outcome: String = "PENDING", val checkedAt: Long? = null)
