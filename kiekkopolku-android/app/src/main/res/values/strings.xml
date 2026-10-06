@@ -100,7 +100,7 @@
     <string name="sync_loading">Päivitetään Metrix-tietoja</string>
     <string name="sync_progress">%1$s · tarkistettu: %2$d / %3$d</string>
     <string name="metrix_updated">Metrixistä saatavilla oleva historia on päivitetty.</string>
-    <string name="sync_partial">Kaikkea historiaa ei voitu tuoda. Katso pelaajakohtainen syy asetuksista. Tallennetut kierrokset säilyvät.</string>
+    <string name="sync_partial">Metrix-tuonti jäi osittaiseksi.</string>
     <string name="sync_needs_id">Lisää pelaaja-ID kohdasta Täydennä Metrix-tiedot. Tallennettua koodia ei tarvitse syöttää uudelleen.</string>
     <string name="sync_needs_code">Lisää integraatiokoodi kohdasta Täydennä Metrix-tiedot, jotta historia voidaan hakea.</string>
     <string name="sync_history_limit">Metrix rajoittaa yli vuoden vanhan datan hakua. Saatavilla olevat kierrokset on tallennettu. Vanhan historian pääsystä voi kysyä Metrixiltä: dev@discgolfmetrix.com.</string>
@@ -141,4 +141,10 @@
     <string name="map_legend">Vihreä: pelattu viimeisen 12 kk aikana · Oranssi: vain vanhempia käyntejä · Harmaa: ajankohta tai tuloskortti epäselvä</string>
     <string name="historical_scorecard_missing">Tuloskortteja ei saatavilla yli vuoden takaisille kierroksille.</string>
     <string name="historical_scorecard_cached">Vain vanhempia käyntejä. Aiemmin tallennetut tulostiedot ovat edelleen käytettävissä.</string>
+    <string name="map_info">Kartan tiedot</string>
+    <string name="map_players">Kartan pelaajavalinta</string>
+    <string name="map_choose_players">Valitse pelaaja yläpalkin suodattimesta.</string>
+    <string name="sync_failed">Metrix-päivitys epäonnistui.</string>
+    <string name="sync_limited">Saatavilla oleva historia tarkistettu. Metrix rajaa vanhoja tuloskortteja.</string>
+    <string name="sync_details">Asetukset</string>
 </resources>

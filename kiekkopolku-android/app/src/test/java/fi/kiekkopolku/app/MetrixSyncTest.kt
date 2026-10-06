@@ -49,7 +49,7 @@ class MetrixSyncTest {
         publicHtml = publicVisitHtml()
         response = { content, _ -> if (content == "my_competitions") json("""{"my_competitions":[101]}""")
             else json("""{"Competition":null,"Errors":["data older than year"]}""") }
-        assertEquals(RefreshResult.PARTIAL, repo.refreshSelected())
+        assertEquals(RefreshResult.HISTORY_LIMITED, repo.refreshSelected())
         val h = repo.snapshot()
         assertEquals(1, h.stats().rounds)
         assertEquals(1, h.coverage().blockedCards)
@@ -118,7 +118,7 @@ class MetrixSyncTest {
             PlayerEntity("p", "424242", "Oma"), 0); fail("Doubles must not become personal aces") }
         catch (e: MetrixImportException) { assertEquals("UNSUPPORTED", e.reason) }
     }
-    @Test fun partialErrorKeepsSuccessfulRoundsAndDoesNotAdvanceSuccessTime() = runBlocking {
+    @Test fun expectedHistoryLimitKeepsRoundsAndFullSuccessTimeWithoutReportingImportFailure() = runBlocking {
         add(); repo.refreshSelected()
         timestamp = 200_000
         response = { content, id -> when {
@@ -130,9 +130,24 @@ class MetrixSyncTest {
         val h = repo.snapshot()
         assertEquals(2, h.entries.size)
         assertEquals(100_000L, h.players.single().lastSyncAt)
-        assertEquals("PARTIAL", h.players.single().syncStatus)
+        assertEquals("LIMITED", h.players.single().syncStatus)
         assertEquals("HISTORY_LIMIT", h.players.single().syncError)
         assertNull(repo.progress.value)
+    }
+    @Test fun realErrorSurvivesALaterHistoryLimitIncludingCachedLimits() = runBlocking {
+        add()
+        response = { content, id -> when {
+            content == "my_competitions" -> json("""{"my_competitions":[101,102,103]}""")
+            id == "101" -> round(id)
+            id == "102" -> json("""{"Competition":null,"Errors":["Access denied"]}""")
+            else -> json("""{"Competition":null,"Errors":["data older than year"]}""")
+        } }
+        assertEquals(RefreshResult.PARTIAL, repo.refreshSelected())
+        assertEquals("ACCESS", repo.snapshot().players.single().syncError)
+        repo.refreshOnOpen() // The cached history limit used to overwrite ACCESS as well.
+        assertEquals("ACCESS", repo.snapshot().players.single().syncError)
+        assertEquals(1, repo.snapshot().coverage().blockedCards)
+        assertEquals(1, repo.snapshot().entries.size)
     }
     @Test fun offlineAndInvalidCodeKeepPreviouslyImportedData() = runBlocking {
         add(); repo.refreshSelected()

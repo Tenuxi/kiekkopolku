@@ -68,7 +68,9 @@ class HistoryViewModel @Inject constructor(history: HistoryRepository, private v
             RefreshResult.METRIX_NOT_CONNECTED -> R.string.metrix_not_connected
             RefreshResult.NOTHING_SELECTED -> if (automatic) null else R.string.select_players
             RefreshResult.UPDATED_METRIX -> if (automatic) null else R.string.metrix_updated
-            RefreshResult.PARTIAL, RefreshResult.FAILED -> R.string.sync_partial
+            RefreshResult.HISTORY_LIMITED -> if (automatic) null else R.string.sync_limited
+            RefreshResult.PARTIAL -> R.string.sync_partial
+            RefreshResult.FAILED -> R.string.sync_failed
         }
     }
 }

@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,20 +100,33 @@ internal fun CourseMap(history: History, open: (String) -> Unit,
     val located = visits.filter { it.course.hasLocation }
     var selectedIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var showMissing by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.map_course_count, located.size), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-            if (located.size < visits.size) TextButton(onClick = { showMissing = true }) {
-                Text(stringResource(R.string.map_missing_count, visits.size - located.size))
-            }
+    var showInfo by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    Box(Modifier.fillMaxSize().testTag("course-map")) {
+        mapContent(located) { selectedIds = it }
+        FilledTonalIconButton(onClick = { showInfo = true }, modifier = Modifier.align(Alignment.TopStart).padding(12.dp)) {
+            Icon(Icons.Default.Info, stringResource(R.string.map_info))
         }
-        Text(stringResource(R.string.map_legend), style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-        if (history.coverage().blockedCards > 0) Text(stringResource(R.string.map_history_limit, history.selectedEntries().count { it.status == "METADATA_ONLY" }, history.unresolvedHistoricalEvents()),
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-        if (visits.isEmpty()) Text(stringResource(R.string.map_no_courses), modifier = Modifier.padding(16.dp))
-        Box(Modifier.weight(1f)) { mapContent(located) { selectedIds = it } }
+        if (visits.isEmpty()) Surface(Modifier.align(Alignment.Center).padding(20.dp), shape = MaterialTheme.shapes.medium) {
+            Text(stringResource(if (history.activePlayers.isEmpty()) R.string.map_choose_players else R.string.map_no_courses),
+                modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+        }
     }
+    if (showInfo) AlertDialog(onDismissRequest = { showInfo = false },
+        title = { Text(stringResource(R.string.map_info)) },
+        text = { LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { Text(stringResource(R.string.map_course_count, located.size)) }
+            if (located.size < visits.size) item { TextButton(onClick = { showInfo = false; showMissing = true }) {
+                Text(stringResource(R.string.map_missing_count, visits.size - located.size))
+            } }
+            item { Text(stringResource(R.string.map_legend)) }
+            if (history.coverage().blockedCards > 0) item { Text(stringResource(R.string.map_history_limit,
+                history.selectedEntries().count { it.status == "METADATA_ONLY" }, history.unresolvedHistoricalEvents())) }
+            if (history.players.any { it.sample && it.active }) item { Text(stringResource(R.string.sample_banner)) }
+            item { TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://openfreemap.org/"))) }) {
+                Text("© OpenStreetMap · OpenMapTiles · OpenFreeMap", style = MaterialTheme.typography.labelSmall)
+            } }
+        } }, confirmButton = { TextButton(onClick = { showInfo = false }) { Text(stringResource(R.string.close)) } })
     val choices = if (showMissing) visits.filterNot { it.course.hasLocation } else visits.filter { it.course.id in selectedIds }
     if (showMissing || selectedIds.isNotEmpty()) AlertDialog(onDismissRequest = { selectedIds = emptyList(); showMissing = false },
         title = { Text(stringResource(if (showMissing) R.string.map_missing_title else R.string.courses)) },
@@ -225,7 +242,7 @@ private fun NativeCourseMap(visits: List<CourseVisit>, select: (List<String>) ->
         }
     }
     Box(Modifier.fillMaxSize()) {
-        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().padding(bottom = 48.dp))
+        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         FilledTonalButton(onClick = { fit() }, enabled = ready, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
             Text(stringResource(R.string.map_fit))
         }
@@ -236,11 +253,7 @@ private fun NativeCourseMap(visits: List<CourseVisit>, select: (List<String>) ->
                 TextButton(onClick = { map?.let { loadStyle(it) } }) { Text(stringResource(R.string.retry)) }
             }
         }
-        // Explicit credit remains visible independently of the remote style's attribution field.
-        Surface(Modifier.align(Alignment.BottomCenter), color = MaterialTheme.colorScheme.surface.copy(alpha = .95f)) {
-            TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://openfreemap.org/"))) }) {
-                Text("© OpenStreetMap · OpenMapTiles · OpenFreeMap", style = MaterialTheme.typography.labelSmall)
-            }
-        }
+        // MapLibre's native attribution remains visible above the bottom navigation.
+        // Provider credits are also available in the map info dialog.
     }
 }

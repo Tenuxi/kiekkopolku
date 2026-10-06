@@ -1,4 +1,4 @@
-# Kiekkopolku Android — 0.5.0
+# Kiekkopolku Android — 0.5.1
 
 Itsenäisesti Android Studiossa avattava Android-projekti. ApplicationId: `fi.kiekkopolku.app` (testiversio: `fi.kiekkopolku.app.debug`). Kotlin, Compose, Material 3, Room, Flow ja Hilt. MinSdk 26, compile/targetSdk 35. Integraatiokoodin tarkistus käyttää Metrixin dokumentoitua API:a. Koodi tallennetaan salattuna Android Keystoren avulla. Oikean kierroshistorian tuonti käyttää `my_competitions`- ja `result`-kutsuja.
 
@@ -52,3 +52,9 @@ Vanhan API-tuloskortin estyessä sovellus yrittää julkista tapahtumasivua ilma
 Release käyttää paikallista `.signing/release.properties`-tiedostoa (storeFile, storePassword, keyAlias, keyPassword) ja sen osoittamaa keystorea. Molemmat on suljettu Gitistä. Julkaisukoneen avain on `.signing/release.jks`. **Varmuuskopioi koko .signing-kansio turvallisesti:** sama avain tarvitaan tuleviin päivityksiin. Kloonattu projekti ei rakenna release-pakettia ilman allekirjoitusasetuksia. Rakenna `./gradlew :app:assembleRelease` ja tarkista `apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk`.
 
 Release (`fi.kiekkopolku.app`) ja debug (`fi.kiekkopolku.app.debug`) ovat erillisiä asennuksia ja tietovarastoja. Nykyisen testiversion päivitys tehdään debug-APK:lla alkuperäisellä debug-avaimella. Release tarvitsee profiilien lisäyksen uudelleen. Allekirjoitus todentaa paketin ja mahdollistaa päivitykset; se ei takaa Play Protect -varoitusten poistumista.
+
+## Versio 0.5.1
+
+Kartta täyttää Scaffoldin vapaaksi jättämän alueen ilman pysyviä tilasto-, pelaajavalinta- tai seliterivejä. Kartan tiedot avautuvat info-painikkeesta; pelaajavalinta yläpalkin suodattimesta. Karttamerkit ja klusterit toimivat ennallaan. Insets-kulutus estää järjestelmäpalkkien ja näppäimistön varauksen moninkertaistumisen; kartalle siirtyminen sulkee näppäimistön.
+
+Odotettu Metrix-historiarajoitus tallentuu LIMITED-tilana. Se ei yksin aiheuta automaattipäivityksen virheilmoitusta, mutta selitys pysyy pelaajan asetuksissa ja manuaalinen päivitys kertoo rajoituksesta lyhyesti. Oikeat virheet eivät enää peity myöhempien vuosirajoitusten alle. Virheilmoitus on lyhyt, tilapäinen snackbar, jonka Asetukset-painike avaa pelaajakohtaiset syyt.

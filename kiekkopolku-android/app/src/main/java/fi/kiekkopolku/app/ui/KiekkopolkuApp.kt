@@ -18,6 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.lifecycle.Lifecycle
@@ -84,18 +88,43 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         var roundId by rememberSaveable { mutableStateOf<String?>(null) }
         var roundPlayerId by rememberSaveable { mutableStateOf<String?>(null) }
         val nested = profiles || courseId != null || roundId != null
+        val mapVisible = tab == 4 && !nested
+        var playerPicker by rememberSaveable { mutableStateOf(false) }
+        val focus = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
+        LaunchedEffect(mapVisible) { if (mapVisible) { focus.clearFocus(force = true); keyboard?.hide() } }
         fun back() { when { roundId != null -> { roundId = null; roundPlayerId = null }; courseId != null -> courseId = null; else -> profiles = false } }
         BackHandler(nested) { back() }
         val snackbar = remember { SnackbarHostState() }
         val context = androidx.compose.ui.platform.LocalContext.current
-        LaunchedEffect(message) { message?.let { snackbar.showSnackbar(context.getString(it)); vm.message.value = null } }
+        LaunchedEffect(message) { message?.let { text ->
+            val details = text in listOf(R.string.sync_partial, R.string.sync_failed, R.string.sync_limited)
+            val result = snackbar.showSnackbar(context.getString(text),
+                actionLabel = if (details) context.getString(R.string.sync_details) else null,
+                withDismissAction = details, duration = SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed) { profiles = true; courseId = null; roundId = null }
+            vm.message.compareAndSet(text, null)
+        } }
+        if (playerPicker) AlertDialog(onDismissRequest = { playerPicker = false },
+            title = { Text(stringResource(R.string.map_players)) },
+            text = { LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                items(history.players, key = { it.id }) { player ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = player.active, onCheckedChange = { vm.select(player.id, it) })
+                        Text(player.name, Modifier.weight(1f))
+                    }
+                }
+            } }, confirmButton = { TextButton(onClick = { playerPicker = false }) { Text(stringResource(R.string.close)) } })
         val labels = listOf(R.string.courses, R.string.rounds, R.string.aces, R.string.stats, R.string.map)
         val icons = listOf(Icons.Default.Place, Icons.AutoMirrored.Filled.List, Icons.Default.StarOutline, Icons.Default.BarChart, Icons.Default.Map)
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
-            topBar = { TopAppBar(title = { Text(stringResource(if (profiles) R.string.profiles else R.string.app_name)) },
+            topBar = { TopAppBar(title = { Text(stringResource(if (profiles) R.string.profiles else R.string.app_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { if (nested) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
                 actions = {
+                    if (mapVisible && history.players.isNotEmpty()) IconButton(onClick = { playerPicker = true }) {
+                        Icon(Icons.Default.FilterList, stringResource(R.string.map_players))
+                    }
                     if (busy) {
                         val description = stringResource(R.string.sync_loading)
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
@@ -109,17 +138,19 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
                     icon = { Icon(icons[index], null) }, label = { Text(stringResource(label)) })
             } } },
         ) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
-                progress?.let { Text(if (it.phase == "COURSES") stringResource(R.string.sync_courses, it.playerName) else stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
-                    style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
-                Text(stringResource(R.string.local_mode), style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
-                if (history.players.any { it.sample && it.active }) Text(stringResource(R.string.sample_banner),
-                    style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp))
-                if (!profiles && history.players.isNotEmpty()) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(history.players, key = { it.id }) { p -> FilterChip(selected = p.active,
-                        onClick = { vm.select(p.id, !p.active) }, label = { Text(p.name) },
-                        leadingIcon = { if (p.active) Icon(Icons.Default.Check, null, Modifier.size(18.dp)) else PlayerDot(p.color) }) }
+            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().testTag("screen-content")) {
+                if (!mapVisible) {
+                    progress?.let { Text(if (it.phase == "COURSES") stringResource(R.string.sync_courses, it.playerName) else stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
+                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+                    Text(stringResource(R.string.local_mode), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                    if (history.players.any { it.sample && it.active }) Text(stringResource(R.string.sample_banner),
+                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp))
+                    if (!profiles && history.players.isNotEmpty()) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(history.players, key = { it.id }) { p -> FilterChip(selected = p.active,
+                            onClick = { vm.select(p.id, !p.active) }, label = { Text(p.name) },
+                            leadingIcon = { if (p.active) Icon(Icons.Default.Check, null, Modifier.size(18.dp)) else PlayerDot(p.color) }) }
+                    }
                 }
                 val entries = history.selectedEntries()
                 when {
@@ -127,7 +158,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
                     state.readFailed -> Notice(R.string.read_failed, action = vm::retry, actionLabel = R.string.retry)
                     profiles -> Profiles(history, busy, vm)
                     history.players.isEmpty() -> Welcome(busy, { profiles = true }, vm::sample)
-                    history.activePlayers.isEmpty() -> Notice(R.string.select_players)
+                    history.activePlayers.isEmpty() && !mapVisible -> Notice(R.string.select_players)
                     roundId != null -> RoundDetail(history, entries.find { it.roundId == roundId && it.playerId == roundPlayerId })
                     courseId != null -> CourseDetail(history, courseId!!) { roundId = it.roundId; roundPlayerId = it.playerId }
                     tab == 4 -> mapScreen(history) { courseId = it }
@@ -354,6 +385,8 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
                     }) { Text(stringResource(R.string.open_profile)) } }
                 }
                 if (!p.sample) p.syncError?.let { Muted(stringResource(syncErrorText(it))) }
+                if (!p.sample && p.syncError != "HISTORY_LIMIT" && history.coverage(setOf(p.id)).blockedCards > 0)
+                    Muted(stringResource(R.string.sync_history_limit))
                 if (!p.sample && p.syncStatus == "SUCCESS") Muted(stringResource(R.string.sync_available))
                 Muted(p.lastSyncAt?.let { stringResource(R.string.last_updated, updated(it)) } ?: stringResource(R.string.never_synced))
             }

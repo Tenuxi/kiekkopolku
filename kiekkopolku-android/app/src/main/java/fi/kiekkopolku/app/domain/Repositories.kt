@@ -15,7 +15,7 @@ interface SyncRepository {
     suspend fun refreshSelected(): RefreshResult
     suspend fun refreshOnOpen(): RefreshResult = RefreshResult.NOTHING_SELECTED
 }
-enum class RefreshResult { UPDATED_SAMPLE, METRIX_NOT_CONNECTED, NOTHING_SELECTED, UPDATED_METRIX, PARTIAL, FAILED }
+enum class RefreshResult { UPDATED_SAMPLE, METRIX_NOT_CONNECTED, NOTHING_SELECTED, UPDATED_METRIX, HISTORY_LIMITED, PARTIAL, FAILED }
 class DuplicatePlayerException : IllegalArgumentException()
 class InvalidIntegrationCodeException : Exception()
 class MetrixConnectionException : Exception()

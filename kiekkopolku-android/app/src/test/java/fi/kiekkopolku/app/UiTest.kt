@@ -13,6 +13,14 @@ import fi.kiekkopolku.app.ui.KiekkopolkuApp
 import fi.kiekkopolku.app.ui.CourseMap
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import org.junit.Assert.*
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -31,6 +39,7 @@ class UiTest {
     private class Fake : HistoryRepository, PlayerRepository, SyncRepository {
         override val history = MutableStateFlow(History())
         var opened = 0
+        var refreshResult = RefreshResult.UPDATED_METRIX
         var refreshGate: CompletableDeferred<Unit>? = null
         override val progress = MutableStateFlow<SyncProgress?>(null)
         override suspend fun refreshOnOpen(): RefreshResult {
@@ -40,7 +49,7 @@ class UiTest {
                 refreshGate!!.await()
                 progress.value = null
             }
-            return RefreshResult.UPDATED_METRIX
+            return refreshResult
         }
         override suspend fun addPlayer(metrixId: String, name: String, integrationCode: String, profileId: String?) {
             history.value = history.value.copy(players = history.value.players + Player(metrixId.ifBlank { "linked" }, metrixId.ifBlank { null }, name, 0, true, false, null, integrationCode.isNotBlank()))
@@ -53,7 +62,7 @@ class UiTest {
                 listOf(RoundEntry("r", "r", "sample", "p", "c", "2026-05-01", "9 väylää", null, 1, -2, "FINISHED", true, true, listOf(Hole(0, "1", 3, 1)))))
         }
         override suspend fun removeSample() { history.value = History() }
-        override suspend fun refreshSelected() = RefreshResult.UPDATED_SAMPLE
+        override suspend fun refreshSelected() = refreshResult
     }
     private fun start(): Fake {
         val fake = Fake()
@@ -113,14 +122,68 @@ class UiTest {
         }) }) }
         compose.onNodeWithText("Viimeksi pelattu").assertIsDisplayed()
         compose.onNodeWithText("Kartta").performClick()
-        compose.onNodeWithText("Kartalla layouteja: 1").assertIsDisplayed()
+        compose.onNodeWithText("Kartalla layouteja: 1").assertDoesNotExist()
         compose.onNodeWithText("Testimerkki").performClick()
         compose.onNodeWithText("Metsäpolku").performClick()
         compose.onNodeWithText("Koordinaatit: 61,50000, 23,70000").assertExists()
         compose.onNodeWithContentDescription("Takaisin").performClick()
+        compose.onNodeWithContentDescription("Kartan tiedot").performClick()
+        compose.onNodeWithText("Kartalla layouteja: 1").assertIsDisplayed()
         compose.onNodeWithText("Sijainti puuttuu: 1").performClick()
         compose.onNodeWithText("Sijainniton rata").performClick()
         compose.onNodeWithText("Koordinaatteja ei ole tallennettu.").assertIsDisplayed()
+    }
+    private fun checkMapFillsAvailableSpace(fontScale: Float = 1f) {
+        val fake = Fake()
+        runBlocking { fake.loadSample() }
+        fake.refreshResult = RefreshResult.HISTORY_LIMITED
+        fake.history.value = fake.history.value.copy(players = fake.history.value.players.map { it.copy(sample=false, syncError="HISTORY_LIMIT", syncStatus="LIMITED") })
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
+            KiekkopolkuApp(vm, mapScreen = { h, open -> CourseMap(h, open, mapContent = { _, _ ->
+                Box(Modifier.fillMaxSize().testTag("map-surface"))
+            }) })
+        } }
+        compose.onNodeWithText("Kartta").performClick()
+        compose.onNodeWithText("Historia tallessa tässä laitteessa").assertDoesNotExist()
+        compose.onNodeWithText("Minä (esimerkki)").assertDoesNotExist()
+        compose.onNodeWithText("Kartalla layouteja: 0").assertDoesNotExist()
+        compose.onNodeWithText("Metrix-tuonti jäi osittaiseksi.", substring=true).assertDoesNotExist()
+        val map = compose.onNodeWithTag("map-surface").fetchSemanticsNode().boundsInRoot
+        val available = compose.onNodeWithTag("screen-content").fetchSemanticsNode().boundsInRoot
+        assertEquals(available.top, map.top, 1f)
+        assertEquals(available.bottom, map.bottom, 1f)
+        assertEquals(available.width, map.width, 1f)
+        assertTrue(map.height > 100f)
+        compose.onNodeWithContentDescription("Kartan pelaajavalinta").performClick()
+        compose.onNodeWithText("Minä (esimerkki)").assertIsDisplayed()
+        compose.onNode(isToggleable()).performClick()
+        compose.onNodeWithText("Sulje").performClick()
+        compose.onNodeWithTag("map-surface").assertIsDisplayed()
+        compose.onNodeWithText("Valitse pelaaja yläpalkin suodattimesta.").assertIsDisplayed()
+    }
+    @Test fun mapFillsAvailableSpaceWithLargeText() = checkMapFillsAvailableSpace(1.8f)
+    @Test fun mapFillsPortraitAndFiltersRemainAvailable() = checkMapFillsAvailableSpace()
+    @Test @Config(qualifiers = "fi-rFI-w320dp-h480dp")
+    fun mapFillsSmallPhone() = checkMapFillsAvailableSpace()
+    @Test @Config(qualifiers = "fi-rFI-w891dp-h411dp-land")
+    fun mapFillsLandscape() = checkMapFillsAvailableSpace()
+
+    @Test fun actualImportFailureIsTemporaryAndItsActionOpensPersistedPlayerReason() {
+        val fake = Fake()
+        fake.history.value = History(players=listOf(Player("p", "123", "Oma", 0, true, false, null, true, "ERROR", "CONNECTION")))
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { KiekkopolkuApp(vm, mapScreen = { h, open -> CourseMap(h, open, mapContent = { _, _ -> Box(Modifier.fillMaxSize()) }) }) }
+        compose.onNodeWithText("Kartta").performClick()
+        compose.runOnIdle { fake.refreshResult = RefreshResult.FAILED; vm.refresh() }
+        compose.onNodeWithText("Metrix-päivitys epäonnistui.", substring=true).assertIsDisplayed()
+        compose.onNodeWithText("Asetukset").performClick()
+        compose.onNodeWithText("Verkkohaku keskeytyi.", substring=true).performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { vm.message.value = R.string.sync_partial }
+        compose.onNodeWithText("Metrix-tuonti jäi osittaiseksi.", substring=true).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(6000)
+        compose.waitForIdle()
+        compose.onNodeWithText("Metrix-tuonti jäi osittaiseksi.", substring=true).assertDoesNotExist()
     }
     @Test fun statisticsShowEventCoverageEvenWhenAllScorecardsAreBlocked() {
         val fake = Fake()

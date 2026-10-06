@@ -114,6 +114,7 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
         var succeeded = 0
         var failed = 0
         var partial = false
+        var limited = false
         try {
             for (player in selected) {
                 if (player.isSample) {
@@ -127,6 +128,7 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                 val previous = dao.syncStates().find { it.playerId == player.id && it.source == "metrix" }
                 val attempted = now()
                 var reason: String? = null
+                var historyLimited = false
                 var imported = 0
                 var processed = 0
                 val code = try { credentials.get(player.id) } catch (e: CancellationException) { throw e }
@@ -158,7 +160,7 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                             val event = knownEvents[id]
                             if (automatic && (event?.outcome == "HISTORY_METADATA_MISSING" || event?.outcome == "HISTORY_LIMIT" && knownRounds[id]?.id in knownEntries) && event.checkedAt != null &&
                                 attempted - event.checkedAt in 0 until 86_400_000L) {
-                                reason = "HISTORY_LIMIT"
+                                historyLimited = true
                                 processed++
                                 continue
                             }
@@ -193,7 +195,8 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                                 }
                             } catch (e: MetrixImportException) {
                                 dao.eventOutcome(player.id, id, e.reason, now())
-                                reason = e.reason // Continue other rounds after a per-result permission/format failure.
+                                if (e.reason == "HISTORY_LIMIT") historyLimited = true
+                                else if (reason == null) reason = e.reason // A later coverage limit must not erase a real error.
                                 if (e.reason == "HISTORY_LIMIT" && entry == null) {
                                     try {
                                         delay(requestDelayMillis)
@@ -203,29 +206,32 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                                             imported++; matched = true
                                         } else dao.eventOutcome(player.id, id, "HISTORY_METADATA_MISSING", now())
                                     } catch (cancel: CancellationException) { throw cancel }
-                                    catch (_: MetrixConnectionException) { /* Keep the blocked event for a later retry. */ }
-                                    catch (_: InvalidIntegrationCodeException) { /* Public page unavailable. */ }
+                                    catch (_: MetrixConnectionException) { reason = "CONNECTION" }
+                                    catch (_: InvalidIntegrationCodeException) { if (reason == null) reason = "ACCESS" }
                                 }
                             }
                             processed++
                         }
                         courseFailure = enrichCourses(player.id, code, automatic, checkedCourses) || courseFailure
                         if (courseFailure && reason == null) reason = "COURSE"
-                        if (ids.isNotEmpty() && !matched && reason == null) reason = "NO_RESULTS"
+                        if (ids.isNotEmpty() && !matched && !historyLimited && reason == null) reason = "NO_RESULTS"
                     } catch (e: CancellationException) { throw e }
                     catch (_: InvalidIntegrationCodeException) { reason = "INVALID_CODE" }
                     catch (_: MetrixConnectionException) { reason = "CONNECTION" }
                 }
                 val success = reason == null
+                if (historyLimited) limited = true
                 if (success) succeeded++ else { failed++; if (imported > 0) partial = true }
                 dao.putSync(SyncStateEntity(player.id, "metrix", attempted,
-                    if (success) now() else previous?.lastSyncAt,
-                    if (success) "SUCCESS" else if (imported > 0) "PARTIAL" else "ERROR",
-                    if (success) "API_AVAILABLE" else "PARTIAL", reason))
+                    if (success && !historyLimited) now() else previous?.lastSyncAt,
+                    if (success) { if (historyLimited) "LIMITED" else "SUCCESS" } else if (imported > 0) "PARTIAL" else "ERROR",
+                    if (historyLimited) "HISTORY_LIMITED" else if (success) "API_AVAILABLE" else "PARTIAL",
+                    reason ?: if (historyLimited) "HISTORY_LIMIT" else null))
             }
             when {
                 failed > 0 && succeeded == 0 && !partial -> RefreshResult.FAILED
                 failed > 0 -> RefreshResult.PARTIAL
+                limited -> RefreshResult.HISTORY_LIMITED
                 succeeded > 0 -> RefreshResult.UPDATED_METRIX
                 else -> RefreshResult.UPDATED_SAMPLE
             }
