@@ -1,4 +1,4 @@
-# Kiekkopolku Android — 0.5.2
+# Kiekkopolku Android — 0.5.3
 
 Itsenäisesti Android Studiossa avattava Android-projekti. ApplicationId: `fi.kiekkopolku.app` (testiversio: `fi.kiekkopolku.app.debug`). Kotlin, Compose, Material 3, Room, Flow ja Hilt. MinSdk 26, compile/targetSdk 35. Integraatiokoodin tarkistus käyttää Metrixin dokumentoitua API:a. Koodi tallennetaan salattuna Android Keystoren avulla. Oikean kierroshistorian tuonti käyttää `my_competitions`- ja `result`-kutsuja.
 
@@ -62,3 +62,9 @@ Odotettu Metrix-historiarajoitus tallentuu LIMITED-tilana. Se ei yksin aiheuta a
 ## Versio 0.5.2
 
 Tilastot näyttää ensin viimeiset 12 kuukautta ja sitten koko tallennetun historian. Molemmissa neljä päälukua muodostavat 2×2-ruudukon. Ajanjakso näkyy pienellä; muut tiedot avataan Lisätiedot-painikkeesta. Metrix-kattavuus, laskentaselitykset ja usean pelaajan erittely ovat erillisissä oletuksena suljetuissa osioissa. Yhden valitun pelaajan duplikaattikorttia ei näytetä. Laskenta ja paikallisesti tallennetut tiedot eivät muuttuneet.
+
+## Versio 0.5.3
+
+Ratakortit käyttävät yhteistä Course-mallia ja olemassa olevaa Room-ratavälimuistia. Kartta käyttää sen koordinaatteja; kortti näyttää olemassa olevan kaupungin, osoitteen tai maan nimen. Pelkistä koordinaateista ei arvata paikkakuntaa, ja puuttuva sijaintirivi jätetään pois. Väylämäärä välitetään olemassa olevasta course_metadata-tiedosta käyttöliittymään. Tuntematonta väylämäärää ei päätellä osittaisista tuloksista.
+
+Korttien kokonaiskierrosrivi poistui; pelaajien nimet ja heidän kierrosmääränsä rivittyvät kompaktisti. Täsmällinen (ei käytössä) -merkintä näytetään hillittynä badgena. Alkuperäinen nimi ja haku/lajittelu säilyvät. Uusia paikkatietopalveluja, tietokantatauluja tai verkkopyyntöjä ei lisätty.

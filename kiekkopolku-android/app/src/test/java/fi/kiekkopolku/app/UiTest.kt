@@ -258,6 +258,38 @@ class UiTest {
         compose.onNodeWithContentDescription("Pelaajittain").performClick()
         compose.onAllNodesWithTag("stats-player").assertCountEquals(2)
     }
+    @Test @Config(qualifiers = "fi-rFI-w320dp-h640dp")
+    fun compactCourseCardsKeepPlayerCountsAndHideUnknownLocation() {
+        val fake = Fake()
+        runBlocking { fake.loadSample() }
+        val original = fake.history.value
+        val second = original.players.first().copy(id="p2", name="Toinen pitkä pelaajanimi")
+        val third = original.players.first().copy(id="p3", name="Kolmas")
+        fake.history.value = original.copy(players=original.players + listOf(second, third),
+            courses=original.courses.map { it.copy(name="Testirata (ei käytössä) → Siniset", city=null, country=null,
+                latitude=61.5, longitude=23.7, holeCount=18) },
+            entries=original.entries + listOf(original.entries.first().copy(playerId="p2"), original.entries.first().copy(playerId="p3")))
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { KiekkopolkuApp(vm) }
+        compose.onNodeWithText("Testirata → Siniset").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ei käytössä").assertIsDisplayed()
+        compose.onNodeWithText("18 väylää").assertIsDisplayed()
+        compose.onNodeWithText("Sijainti ei tiedossa").assertDoesNotExist()
+        compose.onNodeWithText("Kierroksia: 3").assertDoesNotExist()
+        for (name in listOf("Minä (esimerkki) · 1", "Toinen pitkä pelaajanimi · 1", "Kolmas · 1")) {
+            val bounds = compose.onNodeWithText(name).performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue(bounds.left >= 0 && bounds.right <= compose.onRoot().fetchSemanticsNode().boundsInRoot.right)
+        }
+        compose.runOnIdle {
+            val view = compose.activity.window.decorView
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            val file = File("build/reports/screenshots/course-cards.png").apply { parentFile?.mkdirs() }
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        compose.onNodeWithText("Testirata → Siniset").performScrollTo().performClick()
+        compose.onNodeWithText("Koordinaatit: 61,50000, 23,70000").assertExists()
+    }
     @Test fun statisticsShowEventCoverageEvenWhenAllScorecardsAreBlocked() {
         val fake = Fake()
         fake.history.value = History(players = listOf(Player("p", "123", "Oma", 0, true, false, null)),

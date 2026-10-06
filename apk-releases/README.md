@@ -4,6 +4,7 @@ Jokainen julkaistu testiversio säilytetään omassa versionumerokansiossaan. Va
 
 | Versio | APK | Sisältö |
 |---|---|---|
+| 0.5.3 | [debug-päivitys](0.5.3/kiekkopolku-0.5.3-debug.apk) · [release](0.5.3/kiekkopolku-0.5.3-release.apk) | Tiiviit ratakortit ja tunnetut sijainti-/väylätiedot |
 | 0.5.2 | [debug-päivitys](0.5.2/kiekkopolku-0.5.2-debug.apk) · [release](0.5.2/kiekkopolku-0.5.2-release.apk) | Kompaktit tilastot ja avattavat lisätiedot |
 | 0.5.1 | [debug-päivitys](0.5.1/kiekkopolku-0.5.1-debug.apk) · [release](0.5.1/kiekkopolku-0.5.1-release.apk) | Suuri karttanäkymä, avattavat selitteet ja täsmälliset tuonti-ilmoitukset |
 | 0.5.0 | [debug-päivitys](0.5.0/kiekkopolku-0.5.0-debug.apk) · [release](0.5.0/kiekkopolku-0.5.0-release.apk) | Vanhat ratakäynnit, vaalea kartta, koripinnit ja oma kuvake |

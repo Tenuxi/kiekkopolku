@@ -2,8 +2,22 @@ package fi.kiekkopolku.app.domain
 
 data class Player(val id: String, val metrixId: String?, val name: String, val color: Int,
     val active: Boolean, val sample: Boolean, val lastSyncAt: Long?, val hasIntegrationCode: Boolean = false, val syncStatus: String? = null, val syncError: String? = null)
+private val inactiveCourseMarker = Regex("\\s*\\(\\s*ei\\s+käytössä\\s*\\)", RegexOption.IGNORE_CASE)
+
 data class Course(val id: String, val name: String, val city: String?, val country: String?,
-    val latitude: Double?, val longitude: Double?, val physicalId: String = id) {
+    val latitude: Double?, val longitude: Double?, val physicalId: String = id,
+    val holeCount: Int? = null, val address: String? = null) {
+    val isInactive: Boolean get() = inactiveCourseMarker.containsMatchIn(name)
+    val displayName: String get() = name.replace(inactiveCourseMarker, " ").replace(Regex("\\s+"), " ").trim().ifBlank { name }
+    /** A coordinate is not a municipality. Use only human-readable metadata already supplied by the source. */
+    fun locationLabel(locale: java.util.Locale = java.util.Locale.getDefault()): String? {
+        city?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        address?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val value = country?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (value.uppercase(java.util.Locale.ROOT) in java.util.Locale.getISOCountries())
+            java.util.Locale("", value.uppercase(java.util.Locale.ROOT)).getDisplayCountry(locale)
+        else value.takeIf { it.length > 2 }
+    }
     val hasLocation: Boolean get() = latitude != null && longitude != null && latitude.isFinite() && longitude.isFinite() &&
         latitude in -85.0..85.0 && longitude in -180.0..180.0 && !(latitude == 0.0 && longitude == 0.0)
 }

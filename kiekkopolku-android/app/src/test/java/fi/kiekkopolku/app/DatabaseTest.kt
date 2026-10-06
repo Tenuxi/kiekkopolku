@@ -22,6 +22,20 @@ class DatabaseTest {
         repo = LocalHistoryRepository(db, now = { 42L })
     }
     @After fun close() { db.close() }
+    @Test fun courseCardUsesExistingCachedMetadataAndMapCoordinates() = runBlocking {
+        db.history().putCourses(listOf(CourseEntity("c", "Testirata", null, null, 61.5, 23.7)))
+        db.history().putMetadata(CourseExternalMetadataEntity("metrix", "800000", "c",
+            city="Tampere", countryCode="FI", address="Ratakatu 1", holeCount=18))
+        val course = repo.snapshot().courses.single()
+        assertEquals(18, course.holeCount)
+        assertEquals("Tampere", course.locationLabel())
+        assertEquals("Ratakatu 1", course.address)
+        assertEquals(61.5, course.latitude!!, 0.0001)
+        assertEquals(23.7, course.longitude!!, 0.0001)
+        assertTrue(course.hasLocation)
+        db.history().putMetadata(CourseExternalMetadataEntity("metrix", "800000", "c", holeCount=0))
+        assertNull(repo.snapshot().courses.single().holeCount)
+    }
     private class TestCredentials : CredentialStore {
         val values = mutableMapOf<String, String>()
         override suspend fun get(playerId: String) = values[playerId]

@@ -157,4 +157,9 @@
     <string name="stat_courses">Rataa</string>
     <string name="stat_layouts">Layoutia</string>
     <string name="stat_aces">Ace</string>
+    <string name="course_inactive">Ei käytössä</string>
+    <plurals name="course_holes">
+        <item quantity="one">%d väylä</item>
+        <item quantity="other">%d väylää</item>
+    </plurals>
 </resources>

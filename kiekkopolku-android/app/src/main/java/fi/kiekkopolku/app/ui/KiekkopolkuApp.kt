@@ -197,6 +197,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         item { OutlinedButton(onClick = sample, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.load_sample)) } }
     }
 }
+@OptIn(ExperimentalLayoutApi::class)
 @Composable private fun Courses(history: History, open: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var orderIndex by rememberSaveable { mutableIntStateOf(CourseOrder.LAST_PLAYED.ordinal) }
@@ -214,19 +215,25 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         } }
         if (visits.isEmpty()) item { Muted(stringResource(R.string.no_matches)) }
         items(visits, key = { it.course.id }) { visit -> Card(onClick = { open(visit.course.id) }, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(visit.course.name, style = MaterialTheme.typography.titleLarge)
-                Muted(location(visit.course))
-                Text(stringResource(R.string.round_count, visit.entries.size), color = MaterialTheme.colorScheme.primary)
-                Muted(stringResource(R.string.last_played, date(visit.last)))
-                visit.entries.groupBy { it.playerId }.forEach { (id, rounds) ->
-                    Text("${history.players.first { it.id == id }.name} · ${rounds.size}", style = MaterialTheme.typography.bodySmall)
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(visit.course.displayName, style = MaterialTheme.typography.titleMedium)
+                if (visit.course.isInactive) Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                    Text(stringResource(R.string.course_inactive), Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                visit.course.locationLabel()?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                visit.course.holeCount?.takeIf { it > 0 }?.let { Text(pluralStringResource(R.plurals.course_holes, it, it), style = MaterialTheme.typography.bodySmall) }
+                Text(stringResource(R.string.last_played, date(visit.last)), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    visit.entries.groupBy { it.playerId }.forEach { (id, rounds) ->
+                        Text("${history.players.first { it.id == id }.name} · ${rounds.size}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         } }
     }
 }
-@Composable private fun location(course: Course): String = listOfNotNull(course.city, course.country).joinToString(" · ").ifEmpty { stringResource(R.string.unknown_location) }
 @Composable private fun RoundCard(history: History, entry: RoundEntry, open: () -> Unit) {
     Card(onClick = open, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -256,7 +263,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
     if (visit == null) { Notice(R.string.not_available); return }
     LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Title(visit.course.name) }
-        item { Muted(location(visit.course)) }
+        visit.course.locationLabel()?.let { item { Muted(it) } }
         item { Text(stringResource(R.string.round_count, visit.entries.size)) }
         item { Muted(stringResource(R.string.first_played, date(visit.first))); Muted(stringResource(R.string.last_played, date(visit.last))) }
         item { val c = visit.course; Muted(if (c.latitude != null && c.longitude != null) stringResource(R.string.coordinates, c.latitude, c.longitude) else stringResource(R.string.no_coordinates)) }

@@ -32,12 +32,18 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
     suspend fun snapshot(): History = db.withTransaction {
         val sync = dao.syncStates().associateBy { it.playerId }
         val courseRefs = dao.courseRefs().associateBy { it.courseId }
+        val courseMetadata = dao.courseMetadata().filter { it.source == "metrix" }.associateBy { it.courseId }
         val rounds = dao.rounds().associateBy { it.id }
         val holes = dao.holes().groupBy { it.roundId to it.playerId }
         History(dao.players().map {
             Player(it.id, it.externalPlayerId, it.displayName, it.colorKey, it.isActive, it.isSample, sync[it.id]?.lastSyncAt, it.hasIntegrationCode, sync[it.id]?.status, sync[it.id]?.errorCode)
-        }, dao.courses().map { Course(it.id, it.name, it.city, it.countryCode, it.latitude, it.longitude,
-            courseRefs[it.id]?.parentExternalId?.let { parent -> "metrix:course:$parent" } ?: it.id) },
+        }, dao.courses().map { course ->
+            val metadata = courseMetadata[course.id]
+            Course(course.id, course.name, course.city?.takeIf { it.isNotBlank() } ?: metadata?.city,
+                course.countryCode?.takeIf { it.isNotBlank() } ?: metadata?.countryCode, course.latitude, course.longitude,
+                courseRefs[course.id]?.parentExternalId?.let { parent -> "metrix:course:$parent" } ?: course.id,
+                holeCount = metadata?.holeCount?.takeIf { it > 0 }, address = metadata?.address)
+        },
             dao.entries().map { e ->
                 val r = rounds.getValue(e.roundId)
                 RoundEntry(r.id, r.externalRoundId, r.source, e.playerId, e.courseId, r.playedDate,
@@ -257,8 +263,12 @@ class LocalHistoryRepository(private val db: KiekkopolkuDatabase,
                     delay(requestDelayMillis)
                     val parent = parseMetrixCourse(metrix.get("course", code, parentId),
                         course.copy(id = "metrix:course:$parentId"), parentId, now()).course
-                    update = update.copy(course = update.course.copy(latitude = parent.latitude, longitude = parent.longitude),
-                        metadata = update.metadata.copy(latitude = parent.latitude, longitude = parent.longitude))
+                    val city = update.course.city?.takeIf { it.isNotBlank() } ?: parent.city
+                    val country = update.course.countryCode?.takeIf { it.isNotBlank() } ?: parent.countryCode
+                    update = update.copy(course = update.course.copy(latitude = parent.latitude, longitude = parent.longitude,
+                        city = city, countryCode = country),
+                        metadata = update.metadata.copy(latitude = parent.latitude, longitude = parent.longitude,
+                            city = city, countryCode = country))
                 }
                 db.withTransaction {
                     dao.putCourses(listOf(update.course)); dao.putRefs(listOf(update.ref)); dao.putMetadata(update.metadata)
