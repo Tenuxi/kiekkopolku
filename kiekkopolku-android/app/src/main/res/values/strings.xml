@@ -147,4 +147,14 @@
     <string name="sync_failed">Metrix-päivitys epäonnistui.</string>
     <string name="sync_limited">Saatavilla oleva historia tarkistettu. Metrix rajaa vanhoja tuloskortteja.</string>
     <string name="sync_details">Asetukset</string>
+    <string name="stats_details">Lisätiedot</string>
+    <string name="stats_details_for">Lisätiedot: %1$s</string>
+    <string name="stats_by_player">Pelaajittain</string>
+    <string name="stats_calculation">Miten tilastot lasketaan?</string>
+    <string name="stats_expanded">Avattu</string>
+    <string name="stats_collapsed">Suljettu</string>
+    <string name="stat_rounds">Kierrosta</string>
+    <string name="stat_courses">Rataa</string>
+    <string name="stat_layouts">Layoutia</string>
+    <string name="stat_aces">Ace</string>
 </resources>

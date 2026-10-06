@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -89,6 +90,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         var roundPlayerId by rememberSaveable { mutableStateOf<String?>(null) }
         val nested = profiles || courseId != null || roundId != null
         val mapVisible = tab == 4 && !nested
+        val statisticsVisible = tab == 3 && !nested
         var playerPicker by rememberSaveable { mutableStateOf(false) }
         val focus = LocalFocusManager.current
         val keyboard = LocalSoftwareKeyboardController.current
@@ -119,7 +121,7 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         val icons = listOf(Icons.Default.Place, Icons.AutoMirrored.Filled.List, Icons.Default.StarOutline, Icons.Default.BarChart, Icons.Default.Map)
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
-            topBar = { TopAppBar(title = { Text(stringResource(if (profiles) R.string.profiles else R.string.app_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            topBar = { TopAppBar(title = { Text(stringResource(when { profiles -> R.string.profiles; statisticsVisible -> R.string.stats; else -> R.string.app_name }), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { if (nested) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
                 actions = {
                     if (mapVisible && history.players.isNotEmpty()) IconButton(onClick = { playerPicker = true }) {
@@ -140,12 +142,14 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().testTag("screen-content")) {
                 if (!mapVisible) {
-                    progress?.let { Text(if (it.phase == "COURSES") stringResource(R.string.sync_courses, it.playerName) else stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
-                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
-                    Text(stringResource(R.string.local_mode), style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
-                    if (history.players.any { it.sample && it.active }) Text(stringResource(R.string.sample_banner),
-                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp))
+                    if (!statisticsVisible) {
+                        progress?.let { Text(if (it.phase == "COURSES") stringResource(R.string.sync_courses, it.playerName) else stringResource(R.string.sync_progress, it.playerName, it.processed, it.total),
+                            style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+                        Text(stringResource(R.string.local_mode), style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                        if (history.players.any { it.sample && it.active }) Text(stringResource(R.string.sample_banner),
+                            style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 20.dp))
+                    }
                     if (!profiles && history.players.isNotEmpty()) LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(history.players, key = { it.id }) { p -> FilterChip(selected = p.active,
                             onClick = { vm.select(p.id, !p.active) }, label = { Text(p.name) },
@@ -311,11 +315,22 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
     val coverage = history.coverage()
     val lastYear = history.entriesLastYear()
     val today = LocalDate.now()
-    LazyColumn(contentPadding = pagePadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { Title(stringResource(R.string.stats)) }
-        item { StatsCard(stringResource(R.string.all_history), history.stats(), history.physicalCourseCount()) }
-        item { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.metrix_coverage), style = MaterialTheme.typography.titleLarge)
+    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item(key = "last-year") { StatsCard(stringResource(R.string.last_year), history.stats(lastYear), history.physicalCourseCount(lastYear),
+            period = "${date(today.minusYears(1).toString())} – ${date(today.toString())}", tag = "stats-year") }
+        item(key = "all-history") { StatsCard(stringResource(R.string.all_history), history.stats(), history.physicalCourseCount(), tag = "stats-all") }
+        if (history.activePlayers.size > 1) item(key = "players") {
+            StatsDisclosure(stringResource(R.string.stats_by_player)) {
+                history.activePlayers.forEach { player -> key(player.id) {
+                    val own = entries.filter { it.playerId == player.id }
+                    StatsCard(player.name, history.stats(own), history.physicalCourseCount(own)) {
+                        Muted(stringResource(R.string.metrix_list_count, history.coverage(setOf(player.id)).listedEvents))
+                    }
+                } }
+            }
+        }
+        item(key = "coverage") { StatsDisclosure(stringResource(R.string.metrix_coverage)) {
             Text(stringResource(R.string.metrix_list_count, coverage.listedEvents))
             Text(stringResource(R.string.metrix_blocked_count, coverage.blockedCards))
             Text(stringResource(R.string.map_history_limit, entries.count { it.status == "METADATA_ONLY" }, history.unresolvedHistoricalEvents()))
@@ -324,30 +339,71 @@ fun KiekkopolkuApp(vm: HistoryViewModel, mapScreen: @Composable (History, (Strin
             Muted(stringResource(R.string.event_list_help))
             if (coverage.blockedCards > 0 || history.activePlayers.any { it.syncError == "HISTORY_LIMIT" })
                 Muted(stringResource(R.string.stats_history_limit))
-        } } }
-        item { StatsCard(stringResource(R.string.last_year), history.stats(lastYear), history.physicalCourseCount(lastYear))
-            Muted(stringResource(R.string.stats_date_range, date(today.minusYears(1).toString()), date(today.toString()))) }
-        item { Muted(stringResource(R.string.round_count_help)); Spacer(Modifier.height(8.dp)); Muted(stringResource(R.string.coverage_help))
-            Muted(stringResource(R.string.physical_course_help)) }
-        history.activePlayers.forEach { p ->
-            val own = entries.filter { it.playerId == p.id }
-            val ownCoverage = history.coverage(setOf(p.id))
-            item(key = p.id) { StatsCard(p.name, history.stats(own), history.physicalCourseCount(own))
-                Muted(stringResource(R.string.metrix_list_count, ownCoverage.listedEvents)) }
+        } }
+        item(key = "explanation") { StatsDisclosure(stringResource(R.string.stats_calculation)) {
+            Muted(stringResource(R.string.round_count_help))
+            Muted(stringResource(R.string.coverage_help))
+            Muted(stringResource(R.string.physical_course_help))
+            if (history.players.any { it.sample && it.active }) Muted(stringResource(R.string.sample_banner))
+        } }
+    }
+}
+
+@Composable private fun StatsDisclosure(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth()) { StatsDetails(title, title, content) }
+}
+
+@Composable private fun StatsDetails(title: String, description: String, content: @Composable ColumnScope.() -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val state = stringResource(if (expanded) R.string.stats_expanded else R.string.stats_collapsed)
+    TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth().semantics {
+        contentDescription = description; stateDescription = state
+    }) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null)
+        }
+    }
+    if (expanded) Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+}
+
+@Composable private fun StatsCard(title: String, stats: HistoryStats, physicalCourses: Int,
+    period: String? = null, tag: String = "stats-player", extraDetails: @Composable ColumnScope.() -> Unit = {}) {
+    Card(Modifier.fillMaxWidth().testTag(tag)) {
+        Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatNumber(stats.rounds, stringResource(R.string.stat_rounds), Modifier.weight(1f))
+                StatNumber(physicalCourses, stringResource(R.string.stat_courses), Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatNumber(stats.courses, stringResource(R.string.stat_layouts), Modifier.weight(1f))
+                StatNumber(stats.aces, stringResource(R.string.stat_aces), Modifier.weight(1f), ace = true)
+            }
+            val range = period ?: stats.first?.let { first -> "${date(first)} – ${date(stats.last ?: first)}" }
+            range?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        StatsDetails(stringResource(R.string.stats_details), stringResource(R.string.stats_details_for, title)) {
+            Muted(stringResource(R.string.event_count, stats.events))
+            stats.first?.let { Muted(stringResource(R.string.first_played, date(it))) }
+            stats.last?.let { Muted(stringResource(R.string.last_played, date(it))) }
+            if (stats.missingHoles > 0) Muted(pluralStringResource(R.plurals.missing_holes, stats.missingHoles, stats.missingHoles))
+            if (stats.missingCourses > 0) Muted(pluralStringResource(R.plurals.missing_courses, stats.missingCourses, stats.missingCourses))
+            extraDetails()
         }
     }
 }
-@Composable private fun StatsCard(title: String, stats: HistoryStats, physicalCourses: Int) {
-    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
-        Text(stringResource(R.string.known_round_count, stats.rounds))
-        Text(stringResource(R.string.physical_course_count, physicalCourses))
-        Text(stringResource(R.string.layout_count, stats.courses))
-        Text(stringResource(R.string.ace_count, stats.aces)); Muted(stringResource(R.string.event_count, stats.events))
-        stats.first?.let { Muted(stringResource(R.string.first_played, date(it))) }; stats.last?.let { Muted(stringResource(R.string.last_played, date(it))) }
-        if (stats.missingHoles > 0) Muted(pluralStringResource(R.plurals.missing_holes, stats.missingHoles, stats.missingHoles))
-        if (stats.missingCourses > 0) Muted(pluralStringResource(R.plurals.missing_courses, stats.missingCourses, stats.missingCourses))
-    } }
+
+@Composable private fun StatNumber(value: Int, label: String, modifier: Modifier, ace: Boolean = false) {
+    Column(modifier.semantics(mergeDescendants = true) { }, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(value.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (ace) Icon(Icons.Default.StarOutline, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @Composable private fun Profiles(history: History, busy: Boolean, vm: HistoryViewModel) {

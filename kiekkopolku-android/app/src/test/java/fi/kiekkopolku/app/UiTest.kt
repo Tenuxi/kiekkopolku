@@ -185,6 +185,79 @@ class UiTest {
         compose.waitForIdle()
         compose.onNodeWithText("Metrix-tuonti jäi osittaiseksi.", substring=true).assertDoesNotExist()
     }
+    private fun scrollStatisticsTo(text: String) {
+        compose.onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange))
+            .performScrollToNode(hasText(text))
+    }
+    private fun startStatistics(fontScale: Float = 1f): Fake {
+        val fake = Fake()
+        runBlocking { fake.loadSample() }
+        fake.history.value = fake.history.value.copy(entries = fake.history.value.entries.map {
+            it.copy(date = java.time.LocalDate.now().minusDays(1).toString())
+        })
+        val vm = HistoryViewModel(fake, fake, fake)
+        compose.setContent { CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
+            KiekkopolkuApp(vm)
+        } }
+        compose.onNodeWithText("Tilastot").performClick()
+        return fake
+    }
+    @Test fun statisticsPutRecentGridFirstAndKeepDetailsClosed() {
+        startStatistics()
+        compose.runOnIdle {
+            val view = compose.activity.window.decorView
+            val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            val file = File("build/reports/screenshots/statistics.png").apply { parentFile?.mkdirs() }
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        val year = compose.onNodeWithTag("stats-year").fetchSemanticsNode().boundsInRoot
+        val all = compose.onNodeWithTag("stats-all").fetchSemanticsNode().boundsInRoot
+        assertTrue(year.top < all.top)
+        assertTrue(year.bottom <= compose.onNodeWithTag("screen-content").fetchSemanticsNode().boundsInRoot.bottom)
+        compose.onNode(hasText("1") and hasText("Kierrosta") and hasAnyAncestor(hasTestTag("stats-year"))).assertIsDisplayed()
+        compose.onNodeWithTag("stats-player").assertDoesNotExist()
+        compose.onNodeWithText("Pelaajittain").assertDoesNotExist()
+        compose.onNodeWithText("Erillisiä kierrostapahtumia:", substring=true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Lisätiedot: Viimeiset 12 kuukautta").performClick()
+        compose.onNodeWithText("Erillisiä kierrostapahtumia:", substring=true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Lisätiedot: Viimeiset 12 kuukautta").performClick()
+        compose.onNodeWithText("Erillisiä kierrostapahtumia:", substring=true).assertDoesNotExist()
+        scrollStatisticsTo("Miten tilastot lasketaan?")
+        compose.onNodeWithContentDescription("Miten tilastot lasketaan?").performClick()
+        compose.onNodeWithText("Kierrosmäärä", substring=true).performScrollTo().assertIsDisplayed()
+    }
+    @Test @Config(qualifiers = "fi-rFI-w320dp-h480dp")
+    fun statisticsGridFitsNarrowPhoneWithoutScrolling() {
+        startStatistics()
+        val card = compose.onNodeWithTag("stats-year").fetchSemanticsNode().boundsInRoot
+        val content = compose.onNodeWithTag("screen-content").fetchSemanticsNode().boundsInRoot
+        assertTrue(card.bottom <= content.bottom)
+        for (label in listOf("Kierrosta", "Rataa", "Layoutia", "Ace")) {
+            val node = compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag("stats-year"))).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue(node.left >= card.left && node.right <= card.right)
+        }
+    }
+    @Test @Config(qualifiers = "fi-rFI-w320dp-h640dp")
+    fun statisticsGridSupportsLargeText() {
+        startStatistics(1.8f)
+        for (label in listOf("Kierrosta", "Rataa", "Layoutia", "Ace")) {
+            val node = compose.onNode(hasText(label) and hasAnyAncestor(hasTestTag("stats-year"))).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue(node.left >= 0 && node.right <= compose.onRoot().fetchSemanticsNode().boundsInRoot.right)
+        }
+    }
+    @Test fun multiplePlayersHaveAnOptionalBreakdown() {
+        val fake = startStatistics()
+        compose.runOnIdle {
+            val h = fake.history.value
+            fake.history.value = h.copy(players = h.players + h.players.first().copy(id="p2", name="Toinen"),
+                entries = h.entries + h.entries.first().copy(playerId="p2"))
+        }
+        scrollStatisticsTo("Pelaajittain")
+        compose.onNodeWithTag("stats-player").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Pelaajittain").performClick()
+        compose.onAllNodesWithTag("stats-player").assertCountEquals(2)
+    }
     @Test fun statisticsShowEventCoverageEvenWhenAllScorecardsAreBlocked() {
         val fake = Fake()
         fake.history.value = History(players = listOf(Player("p", "123", "Oma", 0, true, false, null)),
@@ -192,7 +265,10 @@ class UiTest {
         val vm = HistoryViewModel(fake, fake, fake)
         compose.setContent { KiekkopolkuApp(vm) }
         compose.onNodeWithText("Tilastot").performClick()
-        compose.onNodeWithText("Koko tallennettu historia").assertIsDisplayed()
+        compose.onNodeWithText("Viimeiset 12 kuukautta").assertIsDisplayed()
+        compose.onNodeWithText("Metrix-listan tapahtumatunnisteita: 1").assertDoesNotExist()
+        scrollStatisticsTo("Metrix-datan kattavuus")
+        compose.onNodeWithContentDescription("Metrix-datan kattavuus").performClick()
         compose.onNodeWithText("Metrix-listan tapahtumatunnisteita: 1").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Vanhan historian rajoittamia tuloshakuja: 1").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Vanhoja käyntejä ilman tuloskorttia: 0. Rajoitettuja tapahtumia ilman varmennettua ratakäyntiä: 1.").performScrollTo().assertIsDisplayed()
